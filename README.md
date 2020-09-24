@@ -56,7 +56,7 @@ conda activate vsflow
 conda install -c rdkit -c conda-forge -c viascience -c schrodinger rdkit pandas xlrd xlsxwriter pdfrw fpdf pymol 
 ```
 
-### Usage
+## Usage
 To use vsflow you have to be in the repository folder and your conda environment has to be activated.
 #### Help
 To display the available modes of vsflow enter the following:
