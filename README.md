@@ -98,7 +98,7 @@ identity = name of sdf tag which contains name/ID of compound (optional, if not 
 the *_Name* tag is used by default)  
 
 Example for a valid database file:   
-name,path,identity 
+name,path,identity  
 synthesized_cpds,/lab/cpds/all_cpds.sdf,lab_id  
 purchased_cpds,/lab/cpds/all_purchased.sdf,  
 computed_3D,/insilico/qm/all_3D_cpds.oeb.gz,  
