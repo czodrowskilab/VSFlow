@@ -25,7 +25,7 @@ from rdkit.Chem.Draw import SimilarityMaps
 
 RDLogger.logger().setLevel(RDLogger.CRITICAL)
 
-## set paths for DATABASES.csv file and cache for pdf output
+## set paths for DATABASES.csv file and cache directory for pdf output
 
 script_path = os.path.dirname(os.path.abspath(__file__))
 database_path = f"{script_path}/DATABASES.csv"
@@ -608,7 +608,6 @@ def sub_search(args):
     else:
         print(f"{len(results)} substructure matches found")
     if results:
-        print(results)
         if args.output.endswith(".sdf") or args.output.endswith(".csv") or args.output.endswith(".xlsx"):
             out_prefix = args.output.rsplit(".", maxsplit=1)[0]
             out_ext = args.output.rsplit(".", maxsplit=1)[1]
