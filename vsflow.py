@@ -10,7 +10,7 @@ import pandas as pd
 import requests
 import xlsxwriter
 from bs4 import BeautifulSoup
-from fpdf import FPDF
+from fpdf import FPDF, set_global
 from pdfrw import PdfReader
 from pdfrw import PdfWriter
 from pymol import cmd
@@ -25,13 +25,20 @@ from rdkit.Chem.Draw import SimilarityMaps
 
 RDLogger.logger().setLevel(RDLogger.CRITICAL)
 
+## set paths for DATABASES.csv file and cache for pdf output
+
+script_path = os.path.dirname(os.path.abspath(__file__))
+database_path = f"{script_path}/DATABASES.csv"
+ttf_path = f"{script_path}/resources/DejaVuSansMono.ttf"
+set_global("FPDF_CACHE_MODE", 2)
+set_global("FPDF_CACHE_DIR", script_path)
 
 ## Read path and identity tags of integrated databases in DATABASES.csv
 
 try:
     DATABASES = {}
     IDENTITY = {}
-    with open("DATABASES.csv", "r") as file:
+    with open(database_path, "r") as file:
         content = file.readlines()
     for line in csv.reader(content):
         if "name" and "path" and "identity" in line:
@@ -98,7 +105,7 @@ def export_page_id(counter, image_list, results):
     num_place_y_odd = 98
     pdf = FPDF()
     pdf.add_page()
-    pdf.add_font("DejaVu", "", "DejaVuSansMono.ttf", uni=True)
+    pdf.add_font("DejaVu", "", ttf_path, uni=True)
     pdf.set_font("DejaVu", "", 11)
     for i in range(len(page_mols)):
         div = str(i / 2).rsplit(".")[1]
@@ -131,7 +138,7 @@ def export_page(counter, image_list, results, prop_dict):
     num_place_y = 98
     pdf = FPDF()
     pdf.add_page()
-    pdf.add_font("DejaVu", "", "DejaVuSansMono.ttf", uni=True)
+    pdf.add_font("DejaVu", "", ttf_path, uni=True)
     pdf.set_font("DejaVu", "", 11)
     for i in range(len(page_mols)):
         pdf.image(page_mols[i], 10, img_place_y, 90)
