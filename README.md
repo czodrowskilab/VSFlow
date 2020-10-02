@@ -89,7 +89,7 @@ vsflow as follows:
 ```bash
 python vsflow.py omega -in {filename}.sdf -flag rocs -fo oeb.gz -out {filename}
 ```
-To permanently integrate your database files in vsflow, add their path to the DATABASES.txt file as follows:  
+To permanently integrate your database files in vsflow, add their path to the DATABASES.csv file as follows:  
 name,path,identity  
 
 name = chose a name to call the database in vsflow (free choice)  
@@ -102,6 +102,8 @@ name,path,identity
 synthesized_cpds,/lab/cpds/all_cpds.sdf,lab_id  
 purchased_cpds,/lab/cpds/all_purchased.sdf,  
 computed_3D,/insilico/qm/all_3D_cpds.oeb.gz,  
+
+You can also look into the DATABASES.csv.sample file to see a firther example.  
 
 Please make sure to write every database in a separate row.  
 Note: The database you add to the first line will be set as your default database (so you don't 
