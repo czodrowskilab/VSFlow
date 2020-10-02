@@ -104,6 +104,8 @@ purchased_cpds,/lab/cpds/all_purchased.sdf,
 computed_3D,/insilico/qm/all_3D_cpds.oeb.gz,  
 
 Please make sure to write every database in a separate row.  
+Note: The database you add to the first line will be set as your default database (so you don't 
+have to specify the -db flag for this database)  
 To call one of the databases in vsflow, simply provide the name using the -db flag. For example:
 ```bash
 python vsflow.py substructure -in {input_file} -out {name_of_output_file} -db synthesized_cpds
