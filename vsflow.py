@@ -310,21 +310,6 @@ def read_file(filename, file_format, smiles_column, delimiter, header):
             frags = Chem.GetMolFrags(mol, asMols=True)
             frag_max = max(frags, key=lambda m: m.GetNumAtoms())
             sub.append((frag_max, i))
-        # eigener Code
-        # content = []
-        # with open(filename, "r") as file:
-        #     for line in file:
-        #         int_cont = line.strip().split(delimiter)
-        #         content.append(int_cont)
-        # col_names = content.pop(header - 1)
-        # if smiles_column in col_names:
-        #     index = col_names.index(smiles_column)
-        # else:
-        #     substructure.error(message="Please specify (correct) name of smiles column (-col)")
-        # sub = []
-        # for i in range(len(content)):
-        #     mol = Chem.MolFromSmiles(content[i][index])
-        #     sub.append((mol, i))
     elif filename.endswith(".xls") or filename.endswith(".xlsx") or file_format == "xls":
         xls = pd.read_excel(filename, header=header - 1)
         for i, rn in xls.iterrows():
