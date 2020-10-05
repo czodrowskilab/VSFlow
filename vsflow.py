@@ -1002,6 +1002,8 @@ rd3d.add_argument("-ff", "--ffield", help="specify forcefield to be used for ene
                                                                                                             "MMFF94s",
                                                                                                             "UFF"],
                   default="MMFF94")
+rd3d.add_argument("-stereo", "--stereoisomers", help="generate all possible stereoisomers for the input molecules",
+                  action="store_true")
 
 
 def gen_coords_mmff(mol, num, ffield):
@@ -1067,8 +1069,11 @@ def sdf_writer_conf(mol_list, out_file):
 
 def gen_3d(args):
     mols = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter, args.header)
-    print(Chem.MolToMolBlock(mols[0][0]))
     pool_3d = mp.Pool(processes=args.mpi_np)
+    if args.stereoisomers:
+        opts = Chem.StereoEnumerationOptions(unique=True)
+        isomers = [(Chem.EnumerateStereoisomers(mol[0], options=opts), mol[1]) for mol in mols]
+        mols = [(Chem.AddHs(iso), iso_gen[1]) for iso_gen in isomers for iso in iso_gen[0]]
     if args.conformers:
         if args.ffield == "MMFF94" or args.ffield == "MMFF94s":
             mols_3d = pool_3d.starmap(gen_confs_mmff, [(mol[0], mol[1], args.conformers, args.ffield) for mol in mols])
