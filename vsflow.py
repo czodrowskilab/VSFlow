@@ -5,6 +5,7 @@ import multiprocessing as mp
 import os
 import time
 from subprocess import run, PIPE, Popen
+from itertools import groupby
 
 import pandas as pd
 import requests
@@ -55,7 +56,18 @@ except FileNotFoundError:
     IDENTITY = {}
     default_db = ""
 
-parser = argparse.ArgumentParser(description="VSFlow")
+parser = argparse.ArgumentParser(description='''\
+**************************
+
+ VV        VV  SSSSSSS            VSFlow   
+  VV      VV  SSS    SS       Virtual Screening
+   VV    VV    SSSS              Workflow
+    VV  VV       SSSS         
+     VVVV     SS    SSS       
+      VV       SSSSSSS           
+      
+**************************
+''')
 subparsers = parser.add_subparsers(title="mode", help="specify mode of vsflow")
 
 # Visualize a database as pdf
@@ -896,24 +908,31 @@ def fp_search(args):
         fp_results = fp_pool.starmap(sim_tan, argslist)
     elif args.similarity == "dice":
         similarity = "Dice"
+        metric = DataStructs.DiceSimilarity
         fp_results = fp_pool.starmap(sim_dice, argslist)
     elif args.similarity == "cos":
         similarity = "Cosine"
+        metric = DataStructs.CosineSimilarity
         fp_results = fp_pool.starmap(sim_cos, argslist)
     elif args.similarity == "sok":
         similarity = "Sokal"
+        metric = DataStructs.SokalSimilarity
         fp_results = fp_pool.starmap(sim_sok, argslist)
     elif args.similarity == "russ":
         similarity = "Russel"
+        metric = DataStructs.RusselSimilarity
         fp_results = fp_pool.starmap(sim_russ, argslist)
     elif args.similarity == "kulc":
         similarity = "Kulczynski"
+        metric = DataStructs.KulczynskiSimilarity
         fp_results = fp_pool.starmap(sim_kulc, argslist)
     elif args.similarity == "mcco":
         similarity = "McConnaughey"
+        metric = DataStructs.McConnaugheySimilarity
         fp_results = fp_pool.starmap(sim_mcco, argslist)
     elif args.similarity == "tver":
         similarity = "Tversky"
+        metric = DataStructs.TverskySimilarity
         fp_results = fp_pool.starmap(sim_tver, argslist)
     print(f"Finished fingerprint search: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # sort and filter results
@@ -1095,14 +1114,63 @@ rd3d.set_defaults(func=gen_3d)
 
 ## PDB database search  ## Beta version: under development
 
-pdb = subparsers.add_parser("pdblig", description="download ligands from a pdb entry")
+pdb = subparsers.add_parser("pdb", description="download ligands from a pdb entry")
 group_pdb = pdb.add_mutually_exclusive_group(required=True)
-group_pdb.add_argument("-in", "--input", help="specify input text file containing comma-separated pdb codes")
+group_pdb.add_argument("-in", "--input", help="specify input file")
 group_pdb.add_argument("-id", "--pdbid", help="specifiy pdb code on command line", action="append")
 group_pdb.add_argument("-s", "--search", help="specify text to search for in pdb database")
-pdb.add_argument("-out", "--output", help="specifiy name of output file")
+group_pdb.add_argument("-smi", "--smiles", help="specify smiles for performing substructure search", action="append")
+group_pdb.add_argument("-sma", "--smarts", help="specify smarts for performing substructure search", action="append")
+pdb.add_argument("-sub", "--substructure", help="specify to perform a substructure search in pdb ligands", action="store_true")
 pdb.add_argument("-ex", "--exclude", help="if set, common small molecule impurties (e.g. GOL, ACT etc.) are not considered as ligands,"
                                           " ions are never considered as ligands.", action="store_true")
+pdb.add_argument("-fi", "--input_format", help="Specify file typ if no file extension is present in input file name")
+pdb.add_argument("-col", "--smiles_column", help="Specify name of smiles column in csv file", default="smiles")
+pdb.add_argument("-del", "--delimiter", help="Specify delimiter of csv file", default=";")
+pdb.add_argument("-head", "--header", help="Specify row of file to be used as column names", type=int, default=1)
+pdb.add_argument("-np", "--mpi_np", default=4, type=int,
+                          help="Specifies the number of processors n when the application is run in"
+                               " MPI mode. [Default = 4]")
+pdb.add_argument("-fm", "--fullmatch", help="when specified, only full matches are returned",
+                          action="store_true")
+pdb.add_argument("-out", "--output", help="specify name for output file", default="pdb_ligs.sdf")
+pdb.add_argument("-mf", "--multfile", help="generate separate output files for every query molecule",
+                          action="store_true")
+pdb.add_argument("-props", "--properties",
+                          help="specifies if calculated molecular properties are written to the output files",
+                          action="store_true")
+pdb.add_argument("-pdf", "--PDF", help="generate a pdf file for substructure matches", action="store_true")
+
+
+def read_pdb_ligs():
+    start_time = time.time()
+    print(f"Start: {time.strftime('%d/%m/%Y, %H:%M:%S', time.localtime())}")
+    non_ligs = ['PO4', 'PG4', '1PE', 'PEG', 'PGE', 'KHZ', 'DMS', 'ACT', 'ZN', 'SO4', 'GOL', 'CA', 'EDO', 'OXL', 'MG',
+                'K', 'NA', 'CL', 'BR', 'I', 'PG6', '', 'BME']
+    r_pdb = requests.get(
+        "http://www.rcsb.org/pdb/rest/customReport.xml?pdbids=*&customReportColumns=structureId,ligandId,ligandSmiles,ligandName&service=wsfile&format=csv")
+    print(f"Finished requesting pdb data: {time.strftime('%d/%m/%Y, %H:%M:%S', time.localtime())}")
+    content = r_pdb.text.split("\n")
+    content.pop(0)
+    content.pop(-1)
+    pdb_cont = []
+    for i in range(len(content)):
+        x = [entry.strip('"') for entry in content[i].split(",")]
+        if x[2] != '':
+            if x[2] in non_ligs:
+                continue
+            else:
+                pdb_cont.append(x)
+    sort_pdb = sorted(pdb_cont, key=lambda entry: entry[2])
+    grouped_pdb = [list(group) for k, group in groupby(sort_pdb, lambda entry: entry[2])]
+    curated_pdb = []
+    for entry in grouped_pdb:
+        mol = Chem.MolFromSmiles(entry[0][3])
+        if mol:
+            curat = (mol, entry[0][2], set(entry[i][0] for i in range(len(entry))), entry[0][-1])
+            curated_pdb.append(curat)
+    print(f"Finished preparing pdb data: {time.strftime('%d/%m/%Y, %H:%M:%S', time.localtime())}")
+    return curated_pdb
 
 
 def read_pdb(infile, pdbid):
@@ -1154,6 +1222,41 @@ def req_lig(pdb_code, exclude):
     return entry_ligs
 
 
+def substruct_smi_exact(smiles):
+    start_time = time.time()
+    print(f"Start: {time.strftime('%d/%m/%Y, %H:%M:%S', time.localtime())}")
+    r = requests.get(f"http://www.rcsb.org/pdb/rest/smilesQuery?smiles={smiles}&search_type=exact")
+    print(f"Finished requesting pdb data: {time.strftime('%d/%m/%Y, %H:%M:%S', time.localtime())}")
+    cont = []
+    for line in r.text.split("\n"):
+        prep = line.lstrip(" ")
+        cont.append(prep)
+    pdb_ids = []
+    chem_ids = []
+    for line in cont:
+        if "<ligand structureId=" in line:
+            x = line.split(" ")
+            for tag in x:
+                if "structureId=" in tag:
+                    pdbid = tag.split("structureId=")[1].strip('"')
+                    pdb_ids.append(pdbid)
+                if "chemicalID=" in tag:
+                    chemid = tag.split("chemicalID=")[1].strip('"')
+                    chem_ids.append(chemid)
+    pdb_text = []
+    for ident in pdb_ids:
+        r_down = requests.get(f"https://files.rcsb.org/download/{ident}.pdb")
+        pdb_text.append(r_down.text)
+    print(pdb_ids)
+    print(chem_ids)
+    print(len(pdb_text))
+    for i in range(len(pdb_text)):
+        with open(f"{pdb_ids[i]}.pdb", "w") as file:
+            file.write(pdb_text[i])
+    return chem_ids
+
+
+
 def search_pdb(args):
     start_time = time.time()
     print(f"Start: {time.strftime('%d/%m/%Y, %H:%M:%S', time.localtime())}")
@@ -1162,8 +1265,8 @@ def search_pdb(args):
         "InChI,ligandName,uniprotAcc,uniprotRecommendedName,uniprotAlternativeNames&service=wsfile&format=csv")
     print(f"Finished reading database: {time.strftime('%d/%m/%Y, %H:%M:%S', time.localtime())}")
     content = r_rest.text.split("\n")
-    head = content.pop(0)
-    pop = content.pop(-1)
+    content.pop(0)
+    content.pop(-1)
     result_mols = []
     non_ligs = ['PO4', 'PG4', '1PE', 'PEG', 'PGE', 'KHZ', 'DMS', 'ACT', 'ZN', 'SO4', 'GOL', 'CA', 'EDO', 'OXL', 'MG',
                 'K', 'NA', 'CL', 'BR', 'I', 'PG6']
@@ -1174,39 +1277,72 @@ def search_pdb(args):
                 ids.add(line[0])
     results = sorted(ids)
     print(f"Finished searching database: {time.strftime('%d/%m/%Y, %H:%M:%S', time.localtime())}")
-    files = []
     for entry in results:
         cmd.fetch(entry, type="pdb")
         print(entry)
-    # for entry in results:
-    #     cmd.save(f"{entry}.pdb", selection=f"{entry}")
     print(f"Finished saving pdb files: {time.strftime('%d/%m/%Y, %H:%M:%S', time.localtime())}")
-                # if line[2] in non_ligs:
-                #     continue
-                # else:
-                #     print(line)
-                    # mol = Chem.MolFromInchi(line[4])
-                    # mol.SetProp("_Name", line[2])
-                    # mol.SetProp("ID", line[2])
-                    # mol.SetProp("Smiles", line[3])
-                    # mol.SetProp("InChI", line[4])
-                    # mol.SetProp("PDB_ID", line[0])
-                    # mol.SetProp("ChemicalName", line[5])
-                    # mol.SetProp("UniprotID", line[6])
-                    # result_mols.append((mol, line[2], line[3], line[4], line[5], line[0], line[6]))
 
 
+def set_prop_pdb(results):
+    for entry in results:
+        entry[0].SetProp("LigandID", entry[2][0])
+        entry[0].SetProp("_Name", entry[2][0])
+        entry[0].SetProp("PDBCode", str(entry[2][1]))
+        entry[0].SetProp("ChemicalID", entry[2][2])
+        entry.append(entry[0].GetPropsAsDict())
+    return results
 
-def get_ligs(args):
-    pdb_list = read_pdb(args.input, args.pdbid)
-    results_ligs = []
-    for code in pdb_list:
-        code_ligs = req_lig(code, args.exclude)
-        results_ligs.append(code_ligs)
-    print(results_ligs)
+
+def req_pdb(args):
+    query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter, args.header)
+    if args.substructure:
+        pdb_database = read_pdb_ligs()
+        pool_pdb = mp.Pool(processes=args.mpi_np)
+        argslist = [(mol[0], (mol[1], mol[2], mol[3]), query_mol[0], query_mol[1], args.fullmatch) for mol in pdb_database for query_mol in
+                    query]
+        sub_results = pool_pdb.starmap(substruct, argslist)
+        results = sorted([entry for entry in sub_results if entry], key=lambda entry: entry[3])
+        print(results)
+        results = set_prop_pdb(results)
+
+        if args.fullmatch:
+            print(f"{len(results)} full matches found")
+        else:
+            print(f"{len(results)} substructure matches found")
+        if results:
+            if args.output.endswith(".sdf") or args.output.endswith(".csv") or args.output.endswith(".xlsx"):
+                out_prefix = args.output.rsplit(".", maxsplit=1)[0]
+                out_ext = args.output.rsplit(".", maxsplit=1)[1]
+            else:
+                out_prefix = args.output
+                out_ext = ""
+            if args.multfile:
+                for i in range(len(query)):
+                    output_mols = []
+                    for entry in results:
+                        if entry[3] == i:
+                            output_mols.append(entry)
+                    if output_mols:
+                        out_name = f"{out_prefix}_query_{i + 1}.{out_ext}"
+                        out_name_pdf = f"{out_prefix}_query_{i + 1}"
+                        output_files(out_name, output_mols)
+                        if args.PDF:
+                            grids = pool_pdb.starmap(gen_grid_mols, [(i, output_mols) for i in range(len(output_mols))])
+                            sub_pdf(pool_pdb, grids, output_mols, out_name_pdf, args.properties)
+            else:
+                output_files(args.output, results)
+                if args.PDF:
+                    grids = pool_pdb.starmap(gen_grid_mols, [(i, results) for i in range(len(results))])
+                    sub_pdf(pool_pdb, grids, results, out_prefix, args.properties)
+        for entry in results:
+            for code in entry[2][1]:
+                r_struct = requests.get(f"https://files.rcsb.org/download/{code}.pdb")
+                with open(f"{code}.pdb", "w") as pdb_file:
+                    pdb_file.write(r_struct.text)
+        pool_pdb.close()
 
 
-pdb.set_defaults(func=search_pdb)
+pdb.set_defaults(func=req_pdb)
 
 
 # Omega
