@@ -23,6 +23,9 @@ from rdkit.Chem import Descriptors
 from rdkit.Chem import Draw, MACCSkeys
 from rdkit.Chem.AtomPairs import Pairs, Torsions
 from rdkit.Chem.Draw import SimilarityMaps
+# from rdkit.Chem.MolStandardize.rdMolStandardize import TautomerEnumerator
+from molvs.tautomer import TautomerCanonicalizer
+from molvs.standardize import Standardizer
 
 RDLogger.logger().setLevel(RDLogger.CRITICAL)
 
@@ -39,6 +42,7 @@ set_global("FPDF_CACHE_DIR", script_path)
 try:
     DATABASES = {}
     IDENTITY = {}
+    STANDARD = {}
     with open(database_path, "r") as file:
         content = file.readlines()
     for line in csv.reader(content):
@@ -50,10 +54,15 @@ try:
                 IDENTITY[line[0]] = line[2]
             except IndexError:
                 IDENTITY[line[0]] = ""
+            try:
+                STANDARD[line[0]] = line[3]
+            except IndexError:
+                STANDARD[line[0]] = ""
     default_db = list(DATABASES.keys())[0]
 except FileNotFoundError:
     DATABASES = {}
     IDENTITY = {}
+    STANDARD = {}
     default_db = ""
 
 parser = argparse.ArgumentParser(description='''\
@@ -287,6 +296,15 @@ substructure.add_argument("-head", "--header", help="Specify row of file to be u
 substructure.add_argument("-fm", "--fullmatch", help="when specified, only full matches are returned",
                           action="store_true")
 substructure.add_argument("-filt", "--filter", help="specify property to filter screening results", action="append")
+substructure.add_argument("-nost", "--no_standard", help="if specified, input query molecules are not standardized before"
+                                                    "substructure search is performed, even if the database was standardized"
+                                                    "using the 'prepare_db' mode of VSFlow",
+                          action="store_true")
+substructure.add_argument("-st", "--standard", help="if specified, input query molecules are standardized before"
+                                                    "substructure search is performed, even if the database was not standardized"
+                                                    "using the 'prepare_db' mode of VSFlow",
+                          action="store_true")
+substructure.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated", type=int, default=100)
 
 
 def read_smiles(smiles):
@@ -569,28 +587,105 @@ def output_files(output, results):
         write_xls(results, f"{output}.xlsx")
 
 
+def query_standardize(mol, i, ntauts):
+    try:
+        mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
+        mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol_sta)
+        return (mol_can, i)
+    except:
+        return (mol, i)
+
+
+def read_file_std(pool, filename, file_format, smiles_column, delimiter, header, ntauts):
+    if filename.endswith(".sdf") or file_format == "sdf":
+        q_mols = Chem.SDMolSupplier(filename)
+        mols = [(q_mols[i], i) for i in range(len(q_mols)) if q_mols[i]]
+        mols_std = pool.starmap(query_standardize, [(mol[0], mol[1], ntauts) for mol in mols])
+
+    elif filename.endswith(".csv") or file_format == "csv":
+        csv_df = pd.read_csv(filename, header=header - 1, delimiter=delimiter)
+        mols = []
+        for i, rn in csv_df.iterrows():
+            mols.append((Chem.MolFromSmiles(rn[smiles_column]), i))
+        mols_std = pool.starmap(query_standardize, [(mol[0], mol[1], ntauts) for mol in mols])
+
+    elif filename.endswith(".xls") or filename.endswith(".xlsx") or file_format == "xls":
+        xls = pd.read_excel(filename, header=header - 1)
+        mols = []
+        for i, rn in xls.iterrows():
+            mols.append((Chem.MolFromSmiles(rn[smiles_column]), i))
+        mols_std = pool.starmap(query_standardize, [(mol[0], mol[1], ntauts) for mol in mols])
+    else:
+        if file_format is None:
+            substructure.error(message="Please specify input file format (-fi) [sdf, csv and xlsx are supported]")
+    return mols_std
+
+
+def read_smiles_std(smiles, ntauts):
+    sub = []
+    for i in range(len(smiles)):
+        mol = Chem.MolFromSmiles(smiles[i])
+        mol_std = query_standardize(mol, i, ntauts)
+        sub.append(mol_std)
+    return sub
+
+
+def read_input_std(pool, smiles, smarts, infile, input_format, smiles_column, delimiter, header, ntauts):
+    if smiles:
+        query = read_smiles_std(smiles, ntauts)
+    elif smarts:
+        query = read_smarts(smarts)
+    else:
+        query = read_file_std(pool, infile, input_format, smiles_column, delimiter, header, ntauts)
+    return query
+
+
 def sub_search(args):
     start_time = time.time()
     print(f"Start: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    pool_sub = mp.Pool(processes=args.mpi_np)
     # check input
     if args.filter:
         filter_dict = check_filter(args.filter)
     # read input files or input strings
     data = read_db(args.database)
     identity = read_id(args.database, args.identity)
-    query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
-                       args.header)
+    if args.database in DATABASES:
+        if args.standard:
+            print("Standardize query molecules...")
+            query = read_input_std(pool_sub, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
+                           args.header, args.ntauts)
+        elif STANDARD[args.database] == "yes" and args.no_standard is False:
+            print("Standardize query molecules...")
+            query = read_input_std(pool_sub, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
+                           args.header, args.ntauts)
+        elif STANDARD[args.database] == "yes" and args.no_standard:
+            query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column,
+                               args.delimiter, args.header)
+        else:
+            query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column,
+                               args.delimiter, args.header)
+    else:
+        if args.standard:
+            print("Standardize query molecules...")
+            query = read_input_std(pool_sub, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
+                           args.header, args.ntauts)
+        else:
+            query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column,
+                               args.delimiter, args.header)
+    # query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
+    #                    args.header)
     print(f"Finished reading query molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
-    data_names = []
-    for mol in data:
-        if mol:
-            name = mol.GetProp(identity)
-            data_names.append((mol, name))
+    data_names = [(mol, mol.GetProp(identity)) for mol in data if mol]
+    # for mol in data:
+    #     if mol:
+    #         name = mol.GetProp(identity)
+    #         data_names.append((mol, name))
     argslist = [(mol[0], mol[1], query_mol[0], query_mol[1], args.fullmatch) for mol in data_names for query_mol in
                 query]
     print(f"Finished reading database: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # perform substructure search
-    pool_sub = mp.Pool(processes=args.mpi_np)
+
     sub_results = pool_sub.starmap(substruct, argslist)
     print(f"Finished substructure search: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # sort and filter substructure results
@@ -1267,7 +1362,6 @@ def search_pdb(args):
     content = r_rest.text.split("\n")
     content.pop(0)
     content.pop(-1)
-    result_mols = []
     non_ligs = ['PO4', 'PG4', '1PE', 'PEG', 'PGE', 'KHZ', 'DMS', 'ACT', 'ZN', 'SO4', 'GOL', 'CA', 'EDO', 'OXL', 'MG',
                 'K', 'NA', 'CL', 'BR', 'I', 'PG6']
     ids = set()
@@ -1474,6 +1568,86 @@ def run_omega_rocs(args):
 
 
 omrocs.set_defaults(func=run_omega_rocs)
+
+
+canon = subparsers.add_parser("preparedb")
+canon_group = canon.add_mutually_exclusive_group(required=True)
+canon_group.add_argument("-in", "--input")
+canon.add_argument("-np", "--mpi", type=int, default=4)
+canon.add_argument("-out", "--output", default="standardized.sdf")
+canon.add_argument("-int", "--integrate")
+canon.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated", type=int, default=100)
+
+
+def do_canon(mol, dict, ntauts):
+    try:
+        mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
+        mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol_sta)
+        return (mol_can, dict)
+    except:
+        return (mol, dict)
+
+
+
+def sdf_write_props(pool_results, output):
+    mol_blocks = []
+    for entry in pool_results:
+        block = Chem.MolToMolBlock(entry[0]).rstrip("\n").split("\n")
+        for line in block:
+            if line.startswith("     RDKit          2D"):
+                new_line = "   VSFlow   version1.0"
+                block[block.index("     RDKit          2D")] = new_line
+        for tag in entry[1].items():
+            block.append(f">  <{tag[0]}>")
+            block.append(f"{tag[1]}")
+            block.append("")
+        mol_blocks.append(block)
+    with open(output, "w") as writefile:
+        for block in mol_blocks:
+            for line in block:
+                writefile.write(f"{line}\n")
+            writefile.write("$$$$\n")
+
+
+def canon_mol(args):
+    start_time = time.time()
+    data = Chem.SDMolSupplier(args.input)
+    print(f"Start: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    can_pool = mp.Pool(processes=args.mpi)
+    data_mol = [(mol, mol.GetPropsAsDict()) for mol in data if mol]
+    print(f"Finished reading sdf file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    data_can = can_pool.starmap(do_canon, [(mol[0], mol[1], args.ntauts) for mol in data_mol])
+    print(f"Finished canonicalizing tautomers: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    sdf_write_props(data_can, args.output)
+    print(f"Finished generating output file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    end_time = time.time()
+    duration = round(end_time - start_time)
+    print(f"Finished in {duration} seconds")
+    print(len(data_can))
+    if args.integrate:
+        path = args.output
+        line = args.integrate
+        name = line.split(",")[0]
+        standard = "yes"
+        print(name)
+        try:
+            tag = line.split(",")[1]
+        except IndexError:
+            tag = ""
+        with open(database_path, "r") as db_file:
+            content = db_file.read()
+            end = content[-1]
+            if f"{name},{path},{tag},{standard}" in content:
+                print("Database path already integrated")
+                exit()
+        with open(database_path, "a") as db_file:
+            if end == "\n":
+                db_file.writelines(f"{name},{path},{tag},{standard}\n")
+            else:
+                db_file.writelines(f"\n{name},{path},{tag},{standard}\n")
+
+
+canon.set_defaults(func=canon_mol)
 
 
 def main():
