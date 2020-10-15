@@ -151,16 +151,50 @@ def export_page_id(counter, image_list, results):
     return out
 
 
+def write_props(pdf, props_list, txt_place_y, txt_space_y, size):
+    pdf.set_font("DejaVu", "", size)
+    for tag in props_list:
+        string = f"{tag[0]}: {tag[1]}"
+        str_fact = 0
+        str_space = 0
+        one_line = int((size * -10 + 190) / 2)
+        two_lines = size * -10 + 190
+        space = size / 2
+        if len(string) < one_line:
+            pdf.text(103, txt_place_y + txt_space_y, string)
+            txt_space_y += space
+        else:
+            if len(string) <= two_lines:
+                while str_fact < len(string) - one_line:
+                    pdf.text(103, txt_place_y + txt_space_y + str_space, string[str_fact:str_fact + one_line])
+                    str_space += space
+                    str_fact += one_line
+                if str_fact >= len(string) - one_line:
+                    pdf.text(103, txt_place_y + txt_space_y + str_space, string[str_fact:len(string)])
+                    str_space += space
+                txt_space_y = txt_space_y + str_space
+            else:
+                write_string = string[:two_lines - 3] + "..."
+                while str_fact < len(write_string) - one_line:
+                    pdf.text(103, txt_place_y + txt_space_y + str_space, write_string[str_fact:str_fact + one_line])
+                    str_space += space
+                    str_fact += one_line
+                if str_fact >= len(write_string) - one_line:
+                    pdf.text(103, txt_place_y + txt_space_y + str_space, write_string[str_fact:len(write_string)])
+                    str_space += space
+                txt_space_y = txt_space_y + str_space
+
+
 def export_page(counter, image_list, results, prop_dict):
     page_mols = image_list[counter:counter + 3]
     page_props = results[counter:counter + 3]
     img_place_y = 10
-    txt_place_y = 6
+    txt_place_y = 15
     num_place_y = 98
     pdf = FPDF()
     pdf.add_page()
     pdf.add_font("DejaVu", "", ttf_path, uni=True)
-    pdf.set_font("DejaVu", "", 11)
+    pdf.set_font("DejaVu", "", 10)
     for i in range(len(page_mols)):
         pdf.image(page_mols[i], 10, img_place_y, 90)
         pdf.rect(10, img_place_y, 190, 90)
@@ -168,38 +202,102 @@ def export_page(counter, image_list, results, prop_dict):
         pdf.text(12, num_place_y, str(counter + i + 1))
         img_place_y += 94
         num_place_y += 94
-        txt_space_y = 10
-        for tag in page_props[i][prop_dict].items():
-            string = f"{tag[0]}: {tag[1]}"
-            str_fact = 0
-            str_space = 0
-            if len(string) < 40:
-                pdf.text(103, txt_place_y + txt_space_y, string)
-                txt_space_y += 6
+        txt_space_y = 0
+        line_counter = 0
+        props_list = list(page_props[i][prop_dict].items())
+        for tag in props_list:
+            entry_length = len(str(tag[0])) + len(str(tag[1])) + 2
+            if entry_length <= 45:
+                line_counter += 1
             else:
-                if len(string) <= 80:
-                    while str_fact < len(string) - 40:
-                        pdf.text(103, txt_place_y + txt_space_y + str_space, string[str_fact:str_fact + 40])
-                        str_space += 5
-                        str_fact += 40
-                    if str_fact >= len(string) - 40:
-                        pdf.text(103, txt_place_y + txt_space_y + str_space, string[str_fact:len(string)])
-                        str_space += 5
-                    txt_space_y = txt_space_y + str_space + 1
-                else:
-                    write_string = string[:77] + "..."
-                    while str_fact < len(write_string) - 40:
-                        pdf.text(103, txt_place_y + txt_space_y + str_space, write_string[str_fact:str_fact + 40])
-                        str_space += 5
-                        str_fact += 40
-                    if str_fact >= len(write_string) - 40:
-                        pdf.text(103, txt_place_y + txt_space_y + str_space, write_string[str_fact:len(write_string)])
-                        str_space += 5
-                    txt_space_y = txt_space_y + str_space + 1
+                line_counter += 2
+        if line_counter <= 17:
+            size = 10
+            write_props(pdf, props_list, txt_place_y, txt_space_y, size)
+        elif 17 < line_counter <= 19:
+            size = 9
+            write_props(pdf, props_list, txt_place_y, txt_space_y, size)
+        elif 19 < line_counter <= 21:
+            size = 8
+            write_props(pdf, props_list, txt_place_y, txt_space_y, size)
+        elif 21 < line_counter <= 23:
+            size = 7
+            write_props(pdf, props_list, txt_place_y, txt_space_y, size)
+        elif 23 < line_counter <= 25:
+            size = 6
+            write_props(pdf, props_list, txt_place_y, txt_space_y, size)
+        elif 25 < line_counter <= 27:
+            size = 5
+            write_props(pdf, props_list, txt_place_y, txt_space_y, size)
+        else:
+            size = 5
+            write_props_list = props_list[:27]
+            write_props(pdf, write_props_list, txt_place_y, txt_space_y, size)
         txt_place_y += 94
     out = f"page_{counter}.pdf"
     pdf.output(out)
     return out
+
+
+
+# def export_page(counter, image_list, results, prop_dict):
+#     page_mols = image_list[counter:counter + 3]
+#     page_props = results[counter:counter + 3]
+#     img_place_y = 10
+#     txt_place_y = 6
+#     num_place_y = 98
+#     pdf = FPDF()
+#     pdf.add_page()
+#     pdf.add_font("DejaVu", "", ttf_path, uni=True)
+#     pdf.set_font("DejaVu", "", 11)
+#     for i in range(len(page_mols)):
+#         pdf.image(page_mols[i], 10, img_place_y, 90)
+#         pdf.rect(10, img_place_y, 190, 90)
+#         pdf.dashed_line(100, img_place_y, 100, img_place_y + 90)
+#         pdf.text(12, num_place_y, str(counter + i + 1))
+#         img_place_y += 94
+#         num_place_y += 94
+#         txt_space_y = 10
+#         line_counter = 0
+#         for tag in page_props[i][prop_dict].items():
+#             entry_length = len(str(tag[0])) + len(str(tag[1])) + 2
+#             if entry_length < 40:
+#                 line_counter += 1
+#             else:
+#                 line_counter += 2
+#         print(line_counter)
+#         for tag in page_props[i][prop_dict].items():
+#             string = f"{tag[0]}: {tag[1]}"
+#             str_fact = 0
+#             str_space = 0
+#             if len(string) < 40:
+#                 pdf.text(103, txt_place_y + txt_space_y, string)
+#                 txt_space_y += 6
+#             else:
+#                 if len(string) <= 80:
+#                     while str_fact < len(string) - 40:
+#                         pdf.text(103, txt_place_y + txt_space_y + str_space, string[str_fact:str_fact + 40])
+#                         str_space += 5
+#                         str_fact += 40
+#                     if str_fact >= len(string) - 40:
+#                         pdf.text(103, txt_place_y + txt_space_y + str_space, string[str_fact:len(string)])
+#                         str_space += 5
+#                     txt_space_y = txt_space_y + str_space + 1
+#                 else:
+#                     write_string = string[:77] + "..."
+#                     while str_fact < len(write_string) - 40:
+#                         pdf.text(103, txt_place_y + txt_space_y + str_space, write_string[str_fact:str_fact + 40])
+#                         str_space += 5
+#                         str_fact += 40
+#                     if str_fact >= len(write_string) - 40:
+#                         pdf.text(103, txt_place_y + txt_space_y + str_space, write_string[str_fact:len(write_string)])
+#                         str_space += 5
+#                     txt_space_y = txt_space_y + str_space + 1
+#         txt_place_y += 94
+#     out = f"page_{counter}.pdf"
+#     pdf.output(out)
+#     return out
+
 
 
 def write_pdf(pages, out_file):
@@ -632,12 +730,41 @@ def read_smiles_std(smiles, ntauts):
 
 def read_input_std(pool, smiles, smarts, infile, input_format, smiles_column, delimiter, header, ntauts):
     if smiles:
+        print("Standardize query molecules...")
         query = read_smiles_std(smiles, ntauts)
     elif smarts:
         query = read_smarts(smarts)
     else:
+        print("Standardize query molecules...")
         query = read_file_std(pool, infile, input_format, smiles_column, delimiter, header, ntauts)
     return query
+
+
+def set_props_2(results, data_names, properties):
+    set_results = []
+    if properties:
+        for entry in results:
+            for mol, num in data_names:
+                if entry[2] == num:
+                    mol.SetProp("MW (g/mol)", str(round(Descriptors.MolWt(mol), 2)))
+                    mol.SetProp("cLogP", str(round(Descriptors.MolLogP(mol), 2)))
+                    mol.SetProp("TPSA (A\u00b2)", str(round(Descriptors.TPSA(mol), 2)))
+                    mol.SetProp("HDon", str(Descriptors.NumHDonors(mol)))
+                    mol.SetProp("HAcc", str(Descriptors.NumHAcceptors(mol)))
+                    mol.SetProp("RotBonds", str(Descriptors.NumRotatableBonds(mol)))
+                    mol.SetProp("AromRings", str(Descriptors.NumAromaticRings(mol)))
+                    mol.SetProp("HetAromRings", str(Descriptors.NumAromaticHeterocycles(mol)))
+                    mol.SetProp("QuerySmiles", entry[4])
+                    mol.SetProp("MatchAtoms", f"{entry[1]}")
+                    set_results.append([mol, entry[1], entry[2], entry[3], entry[4], mol.GetPropsAsDict()])
+    else:
+        for entry in results:
+            for mol, num in data_names:
+                if entry[2] == num:
+                    mol.SetProp("QuerySmiles", entry[4])
+                    mol.SetProp("MatchAtoms", f"{entry[1]}")
+                    set_results.append([mol, entry[1], entry[2], entry[3], entry[4], mol.GetPropsAsDict()])
+    return set_results
 
 
 def sub_search(args):
@@ -649,14 +776,12 @@ def sub_search(args):
         filter_dict = check_filter(args.filter)
     # read input files or input strings
     data = read_db(args.database)
-    identity = read_id(args.database, args.identity)
+    # identity = read_id(args.database, args.identity)
     if args.database in DATABASES:
         if args.standard:
-            print("Standardize query molecules...")
             query = read_input_std(pool_sub, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
                            args.header, args.ntauts)
         elif STANDARD[args.database] == "yes" and args.no_standard is False:
-            print("Standardize query molecules...")
             query = read_input_std(pool_sub, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
                            args.header, args.ntauts)
         elif STANDARD[args.database] == "yes" and args.no_standard:
@@ -667,7 +792,6 @@ def sub_search(args):
                                args.delimiter, args.header)
     else:
         if args.standard:
-            print("Standardize query molecules...")
             query = read_input_std(pool_sub, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
                            args.header, args.ntauts)
         else:
@@ -676,7 +800,8 @@ def sub_search(args):
     # query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
     #                    args.header)
     print(f"Finished reading query molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
-    data_names = [(mol, mol.GetProp(identity)) for mol in data if mol]
+    # data_names = [(mol, mol.GetProp(identity)) for mol in data if mol]
+    data_names = [(data[i], i) for i in range(len(data)) if data[i]]
     # for mol in data:
     #     if mol:
     #         name = mol.GetProp(identity)
@@ -693,7 +818,8 @@ def sub_search(args):
     if args.filter:
         results = filter_res(filter_dict, results)
     # set properties for output files
-    results = set_props_sub(args.properties, results, identity)
+    # results = set_props_sub(args.properties, results, identity)
+    results = set_props_2(results, data_names, args.properties)
     # generate output files
     if args.fullmatch:
         print(f"{len(results)} full matches found")
@@ -772,6 +898,15 @@ fp_sim.add_argument("-top", "--top_hits", type=int, default=10,
 fp_sim.add_argument("-map", "--simmap", help="generates similarity maps for fingerprints in pdf file", action="store_true")
 fp_sim.add_argument("-cut", "--cutoff", help="specify cutoff value for similarity coefficient", type=float)
 fp_sim.add_argument("-filt", "--filter", help="specify property to filter screening results", action="append")
+fp_sim.add_argument("-nost", "--no_standard", help="if specified, input query molecules are not standardized before"
+                                                    "substructure search is performed, even if the database was standardized"
+                                                    "using the 'prepare_db' mode of VSFlow",
+                          action="store_true")
+fp_sim.add_argument("-st", "--standard", help="if specified, input query molecules are standardized before"
+                                                    "substructure search is performed, even if the database was not standardized"
+                                                    "using the 'prepare_db' mode of VSFlow",
+                          action="store_true")
+fp_sim.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated", type=int, default=100)
 
 
 def query_fp_rdkit(query_mol, query_num, nbits):
@@ -878,37 +1013,34 @@ def fp_sim_metric(mol, mol_fp, name, query_fp, query_num, metric):
     return [mol, coef, name, query_num]
 
 
-def set_props_fp(properties, sub_results, identity, similarity, fingerprint):
-    results = []
+def set_props_fp(results, data_names, properties, fingerprint, similarity):
+    set_results = []
     if properties:
-        for mol in sub_results:
-            if mol:
-                mol[0].SetProp(identity, mol[2])
-                mol[0].SetProp("MW (g/mol)", str(round(Descriptors.MolWt(mol[0]), 2)))
-                mol[0].SetProp("cLogP", str(round(Descriptors.MolLogP(mol[0]), 2)))
-                mol[0].SetProp("TPSA (A\u00b2)", str(round(Descriptors.TPSA(mol[0]), 2)))
-                mol[0].SetProp("HDon", str(Descriptors.NumHDonors(mol[0])))
-                mol[0].SetProp("HAcc", str(Descriptors.NumHAcceptors(mol[0])))
-                mol[0].SetProp("RotBonds", str(Descriptors.NumRotatableBonds(mol[0])))
-                mol[0].SetProp("AromRings", str(Descriptors.NumAromaticRings(mol[0])))
-                mol[0].SetProp("HetAromRings", str(Descriptors.NumAromaticHeterocycles(mol[0])))
-                mol[0].SetProp("_Name", mol[2])
-                mol[0].SetProp("QuerySmiles", mol[4])
-                mol[0].SetProp("Fingerprint", fingerprint)
-                mol[0].SetProp("Similarity", f"{round(mol[1], 5)} ({similarity})")
-                mol.append(mol[0].GetPropsAsDict())
-                results.append(mol)
+        for entry in results:
+            for mol, num in data_names:
+                if entry[2] == num:
+                    mol.SetProp("MW (g/mol)", str(round(Descriptors.MolWt(mol), 2)))
+                    mol.SetProp("cLogP", str(round(Descriptors.MolLogP(mol), 2)))
+                    mol.SetProp("TPSA (A\u00b2)", str(round(Descriptors.TPSA(mol), 2)))
+                    mol.SetProp("HDon", str(Descriptors.NumHDonors(mol)))
+                    mol.SetProp("HAcc", str(Descriptors.NumHAcceptors(mol)))
+                    mol.SetProp("RotBonds", str(Descriptors.NumRotatableBonds(mol)))
+                    mol.SetProp("AromRings", str(Descriptors.NumAromaticRings(mol)))
+                    mol.SetProp("HetAromRings", str(Descriptors.NumAromaticHeterocycles(mol)))
+                    mol.SetProp("QuerySmiles", entry[4])
+                    mol.SetProp("Fingerprint", fingerprint)
+                    mol.SetProp("Similarity", f"{round(entry[1], 5)} ({similarity})")
+                    set_results.append([mol, entry[1], entry[2], entry[3], entry[4], mol.GetPropsAsDict()])
     else:
-        for mol in sub_results:
-            if mol:
-                mol[0].SetProp(identity, mol[2])
-                mol[0].SetProp("_Name", mol[2])
-                mol[0].SetProp("QuerySmiles", mol[4])
-                mol[0].SetProp("Fingerprint", fingerprint)
-                mol[0].SetProp("Similarity", f"{round(mol[1], 5)} ({similarity})")
-                mol.append(mol[0].GetPropsAsDict())
-                results.append(mol)
-    return results
+        for entry in results:
+            for mol, num in data_names:
+                if entry[2] == num:
+                    mol.SetProp("QuerySmiles", entry[4])
+                    mol.SetProp("Fingerprint", fingerprint)
+                    mol.SetProp("Similarity", f"{round(entry[1], 5)} ({similarity})")
+                    set_results.append([mol, entry[1], entry[2], entry[3], entry[4], mol.GetPropsAsDict()])
+    return set_results
+
 
 
 def sim_map(results, fp_func, metric):
@@ -950,6 +1082,7 @@ def fp_gen_pdf(fp_pool, results, metric, simmap, fingerprint, fpradius, nbits, f
 def fp_search(args):
     start_time = time.time()
     print(f"Start: {time.strftime('%d/%m/%Y, %H:%M:%S', time.localtime())}")
+    fp_pool = mp.Pool(processes=args.mpi_np)
     # check input arguments
     if args.cutoff:
         if args.cutoff > 1:
@@ -959,17 +1092,38 @@ def fp_search(args):
     # read input files or input strings
     data = read_db(args.database)
     identity = read_id(args.database, args.identity)
-    query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
-                       args.header)
+    if args.database in DATABASES:
+        if args.standard:
+            query = read_input_std(fp_pool, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
+                           args.header, args.ntauts)
+        elif STANDARD[args.database] == "yes" and args.no_standard is False:
+            query = read_input_std(fp_pool, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
+                           args.header, args.ntauts)
+        elif STANDARD[args.database] == "yes" and args.no_standard:
+            query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column,
+                               args.delimiter, args.header)
+        else:
+            query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column,
+                               args.delimiter, args.header)
+    else:
+        if args.standard:
+            query = read_input_std(fp_pool, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
+                           args.header, args.ntauts)
+        else:
+            query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column,
+                               args.delimiter, args.header)
+    # query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
+    #                    args.header)
     print(f"Finished reading query molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
-    data_names = []
-    for mol in data:
-        if mol:
-            name = mol.GetProp(identity)
-            data_names.append((mol, name))
+    data_names = [(data[i], i) for i in range(len(data)) if data[i]]
+    # data_names = []
+    # for mol in data:
+    #     if mol:
+    #         name = mol.GetProp(identity)
+    #         data_names.append((mol, name))
     print(f"Finished reading database: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # calculate fingerprints and similarities
-    fp_pool = mp.Pool(processes=args.mpi_np)
+
     if args.fingerprint == "rdkit":
         fp_name = f"RDKitFingerprint {args.NBITS} bit"
         fp_query = fp_pool.starmap(query_fp_rdkit, [(query_mol[0], query_mol[1], args.NBITS) for query_mol in query])
@@ -1053,7 +1207,7 @@ def fp_search(args):
     if args.filter:
         sorted_results = filter_res(filter_dict, sorted_results)
     # set properties for output files
-    results = set_props_fp(args.properties, sorted_results, identity, similarity, fp_name)
+    results = set_props_fp(sorted_results, data_names, args.properties, fp_name, similarity)
     # generate output files
     if results:
         if args.output.endswith(".sdf") or args.output.endswith(".csv") or args.output.endswith(".xlsx"):
