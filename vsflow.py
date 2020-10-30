@@ -26,44 +26,87 @@ from rdkit.Chem.Draw import SimilarityMaps
 # from rdkit.Chem.MolStandardize.rdMolStandardize import TautomerEnumerator
 from molvs.tautomer import TautomerCanonicalizer
 from molvs.standardize import Standardizer
-
+import matplotlib as mpl
+mpl.rc('figure', max_open_warning=0)
+# from pathlib import Path
+# home = str(Path.home())
+# print(home)
 RDLogger.logger().setLevel(RDLogger.CRITICAL)
 
 ## set paths for DATABASES.csv file and cache directory for pdf output
 
 script_path = os.path.dirname(os.path.abspath(__file__))
-database_path = f"{script_path}/DATABASES.csv"
+home = os.path.expanduser("~")
+# database_path = f"{script_path}/DATABASES.csv"
+database_path = f"{home}/.vsflow/DATABASES.csv"
+database_global = f"{script_path}/DATABASES.csv"
 ttf_path = f"{script_path}/resources/DejaVuSansMono.ttf"
 set_global("FPDF_CACHE_MODE", 2)
 set_global("FPDF_CACHE_DIR", script_path)
 
-## Read path and identity tags of integrated databases in DATABASES.csv
-
+## Read path of integrated databases in DATABASES.csv or generate directory
+DATABASES = {}
+# IDENTITY = {}
+STANDARD = {}
+if ".vsflow" in os.listdir(home):
+    if "DATABASES.csv" in os.listdir(f"{home}/.vsflow"):
+        with open(database_path, "r") as file:
+            content = file.readlines()
+        for line in csv.reader(content):
+            if "name" and "path" and "standardized" in line:
+                continue
+            else:
+                DATABASES[line[0]] = line[1]
+                # try:
+                #     IDENTITY[line[0]] = line[2]
+                # except IndexError:
+                #     IDENTITY[line[0]] = ""
+                try:
+                    STANDARD[line[0]] = line[2]
+                except IndexError:
+                    STANDARD[line[0]] = ""
+        #default_db = list(DATABASES.keys())[0]
+        # except FileNotFoundError:
+        #     DATABASES = {}
+        #     # IDENTITY = {}
+        #     STANDARD = {}
+        #     default_db = ""
+        default_db = ""
+    else:
+        with open(database_path, "w") as db_file:
+            db_file.write("")
+        # DATABASES = {}
+        # STANDARD = {}
+        default_db = ""
+else:
+    os.mkdir(f"{home}/.vsflow")
+    with open(database_path, "w") as db_file:
+        db_file.write("")
+    default_db = ""
 try:
-    DATABASES = {}
-    IDENTITY = {}
-    STANDARD = {}
-    with open(database_path, "r") as file:
-        content = file.readlines()
+    with open(database_global, "r") as global_db:
+        content = global_db.readlines()
     for line in csv.reader(content):
-        if "name" and "path" and "identity" in line:
+        if "name" and "path" and "standardized" in line:
             continue
         else:
             DATABASES[line[0]] = line[1]
             try:
-                IDENTITY[line[0]] = line[2]
-            except IndexError:
-                IDENTITY[line[0]] = ""
-            try:
-                STANDARD[line[0]] = line[3]
+                STANDARD[line[0]] = line[2]
             except IndexError:
                 STANDARD[line[0]] = ""
-    default_db = list(DATABASES.keys())[0]
 except FileNotFoundError:
-    DATABASES = {}
-    IDENTITY = {}
-    STANDARD = {}
-    default_db = ""
+    pass
+DEFAULT_DB = {"substructure": "", "fpsim": "", "rocs": "", "omrocs": ""}
+if "DEFAULT_DB.csv" in os.listdir(f"{home}/.vsflow"):
+    with open(f"{home}/.vsflow/DEFAULT_DB.csv", "r") as db_default:
+        content = db_default.readlines()
+    for line in csv.reader(content):
+        DEFAULT_DB[line[0]] = line[1]
+else:
+    with open(f"{home}/.vsflow/DEFAULT_DB.csv", "w") as db_default:
+        db_default.write("")
+print(DEFAULT_DB)
 
 parser = argparse.ArgumentParser(description='''\
 **************************
@@ -134,7 +177,7 @@ def export_page_id(counter, image_list, results):
             pdf.image(f"grid_mol_{counter + i}.jpeg", 10, img_place_y_even, 90)
             pdf.rect(10, img_place_y_even, 90, 90)
             pdf.text(12, num_place_y_even, str(counter + i + 1))
-            pdf.text(12, txt_place_y_even, page_props[i][2])
+            # pdf.text(12, txt_place_y_even, page_props[i][2])
             img_place_y_even += 94
             txt_place_y_even += 94
             num_place_y_even += 94
@@ -142,7 +185,7 @@ def export_page_id(counter, image_list, results):
             pdf.image(f"grid_mol_{counter + i}.jpeg", 110, img_place_y_odd, 90)
             pdf.rect(110, img_place_y_odd, 90, 90)
             pdf.text(112, num_place_y_odd, str(counter + i + 1))
-            pdf.text(112, txt_place_y_odd, page_props[i][2])
+            # pdf.text(112, txt_place_y_odd, page_props[i][2])
             img_place_y_odd += 94
             txt_place_y_odd += 94
             num_place_y_odd += 94
@@ -375,7 +418,7 @@ substructure.add_argument("-np", "--mpi_np", default=4, type=int,
                           help="Specifies the number of processors n when the application is run in"
                                " MPI mode. [Default = 4]")
 substructure.add_argument("-pdf", "--PDF", help="generate a pdf file for substructure matches", action="store_true")
-substructure.add_argument("-db", "--database", help="select database or provide path to database", default=default_db)
+substructure.add_argument("-db", "--database", help="select database or provide path to database", default=DEFAULT_DB["substructure"])
 substructure.add_argument("-id", "--identity",
                           help="specify the identity tag for molecules in database, only required if non-implemented database is used")
 substructure.add_argument("-props", "--properties",
@@ -575,40 +618,48 @@ def write_xls(pool_results, output):
 
 
 def sub_pdf(pool_sub, grids, results, out_name, properties):
-    if properties:
-        counter = gen_counter(grids, 3)
-        pages = pool_sub.starmap(export_page, [(j, grids, results, 5) for j in counter])
-        mol_factor = 3
-    else:
-        counter = gen_counter(grids, 6)
-        pages = pool_sub.starmap(export_page_id, [(j, grids, results) for j in counter])
-        mol_factor = 6
+    counter = gen_counter(grids, 3)
+    pages = pool_sub.starmap(export_page, [(j, grids, results, 5) for j in counter])
+    mol_factor = 3
     pdf_out(pages, len(grids), f"{out_name}.pdf", mol_factor)
+    # if properties:
+    #     counter = gen_counter(grids, 3)
+    #     pages = pool_sub.starmap(export_page, [(j, grids, results, 5) for j in counter])
+    #     mol_factor = 3
+    # else:
+    #     counter = gen_counter(grids, 6)
+    #     pages = pool_sub.starmap(export_page_id, [(j, grids, results) for j in counter])
+    #     mol_factor = 6
+    # pdf_out(pages, len(grids), f"{out_name}.pdf", mol_factor)
 
 
 def read_db(database):
     if database in DATABASES:
         data = Chem.SDMolSupplier(DATABASES[database])
+    elif database == "":
+        substructure.error(message="No default database set. Please use the -db flag to specify a database")
     else:
         try:
             data = Chem.SDMolSupplier(database)
         except FileNotFoundError:
-            substructure.error(message="File not found. Please make sure you specified the correct path!")
+            substructure.error(message=f"File {database} not found. Please make sure you specified the correct path!")
+        except OSError:
+            substructure.error(message=f"File {database} not found. Please make sure you specified the correct path!")
     return data
 
 
-def read_id(database, identity):
-    if database in IDENTITY:
-        if IDENTITY[database]:
-            ident = IDENTITY[database]
-        else:
-            ident = "_Name"
-    else:
-        if identity:
-            ident = identity
-        else:
-            ident = "_Name"
-    return ident
+# def read_id(database, identity):
+#     if database in IDENTITY:
+#         if IDENTITY[database]:
+#             ident = IDENTITY[database]
+#         else:
+#             ident = "_Name"
+#     else:
+#         if identity:
+#             ident = identity
+#         else:
+#             ident = "_Name"
+#     return ident
 
 
 def prop_filt(filtered, filter_dict, results, prop_func, key):
@@ -873,7 +924,7 @@ fp_sim.add_argument("-np", "--mpi_np", default=4, type=int,
                          " MPI mode. [Default = 4]")
 fp_sim.add_argument("-out", "--output", help="specify name of output file", default="vsflow_fingerprint.sdf")
 fp_sim.add_argument("-pdf", "--PDF", help="generate a pdf file for substructure matches", action="store_true")
-fp_sim.add_argument("-db", "--database", help="select database", default=default_db)
+fp_sim.add_argument("-db", "--database", help="select database", default=DEFAULT_DB["fpsim"])
 fp_sim.add_argument("-id", "--identity",
                     help="specify the identity tag for molecules in database, only required if non-implemented database is used")
 fp_sim.add_argument("-props", "--properties",
@@ -1052,6 +1103,7 @@ def sim_map(results, fp_func, metric):
         fig.set_figheight(3.255)
         filename = f"grid_mol_{i}.jpeg"
         fig.savefig(filename, bbox_inches="tight")
+        fig.clear()
         grids.append(filename)
     return grids
 
@@ -1091,7 +1143,7 @@ def fp_search(args):
         filter_dict = check_filter(args.filter)
     # read input files or input strings
     data = read_db(args.database)
-    identity = read_id(args.database, args.identity)
+    # identity = read_id(args.database, args.identity)
     if args.database in DATABASES:
         if args.standard:
             query = read_input_std(fp_pool, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
@@ -1640,7 +1692,7 @@ rocs = subparsers.add_parser("rocs", description="perform ROCS screening")
 group_3 = rocs.add_mutually_exclusive_group(required=True)
 group_3.add_argument("-in", "--input", help="input file")
 group_3.add_argument("-smi", "--smiles", help="specify smiles for substructure search")
-rocs.add_argument("-db", "--database", help="select database", choices=["comas_3d"], default="comas_3d")
+rocs.add_argument("-db", "--database", help="select database", default=DEFAULT_DB["rocs"])
 rocs.add_argument("-out", "--output", help="name of output file without file extension", default="rocs")
 rocs.add_argument("-top", "--top_hits", help="number of top hits to keep", default="100")
 rocs.add_argument("-fo", "--output_format", help="specify output file format", choices=["sdf", "oeb", "oeb.gz"], default="sdf")
@@ -1692,7 +1744,7 @@ group_4.add_argument("-in", "--input", help="input file")
 group_4.add_argument("-smi", "--smiles", help="specify smiles on command line")
 # omrocs.add_argument("-flag", "--FLAG", help="classic, macrocycle, rocs, pose or dense", choices=["classic","macrocycle","rocs","pose","dense"], default="classic")
 omrocs.add_argument("-maxconfs", default="50", help="Maximum number of conformations to be saved. [Default = 50]")
-omrocs.add_argument("-db", "--database", help="select database", choices=["comas_3d"], default="comas_3d")
+omrocs.add_argument("-db", "--database", help="select database", default=DEFAULT_DB["omrocs"])
 omrocs.add_argument("-out", "--output", help="name of output file without file extension", default="omega_rocs")
 omrocs.add_argument("-top", "--top_hits", help="number of top hits to keep", default="100")
 omrocs.add_argument("-fo", "--output_format", help="specify output file format", choices=["sdf", "oeb", "oeb.gz"], default="sdf")
@@ -1729,7 +1781,7 @@ canon_group = canon.add_mutually_exclusive_group(required=True)
 canon_group.add_argument("-in", "--input")
 canon.add_argument("-np", "--mpi", type=int, default=4)
 canon.add_argument("-out", "--output", default="standardized.sdf")
-canon.add_argument("-int", "--integrate")
+canon.add_argument("-int", "--integrate", help="specify name of database")
 canon.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated", type=int, default=100)
 
 
@@ -1777,31 +1829,100 @@ def canon_mol(args):
     end_time = time.time()
     duration = round(end_time - start_time)
     print(f"Finished in {duration} seconds")
-    print(len(data_can))
     if args.integrate:
-        path = args.output
-        line = args.integrate
-        name = line.split(",")[0]
+        path = os.path.abspath(args.output)
+        # line = args.integrate
+        # name = line.split(",")[0]
+        name = args.integrate
         standard = "yes"
-        print(name)
-        try:
-            tag = line.split(",")[1]
-        except IndexError:
-            tag = ""
+        # try:
+        #     tag = line.split(",")[1]
+        # except IndexError:
+        #     tag = ""
         with open(database_path, "r") as db_file:
             content = db_file.read()
             end = content[-1]
-            if f"{name},{path},{tag},{standard}" in content:
+            if f"{name},{path},{standard}" in content:
                 print("Database path already integrated")
                 exit()
         with open(database_path, "a") as db_file:
             if end == "\n":
-                db_file.writelines(f"{name},{path},{tag},{standard}\n")
+                db_file.writelines(f"{name},{path},{standard}\n")
             else:
-                db_file.writelines(f"\n{name},{path},{tag},{standard}\n")
+                db_file.writelines(f"\n{name},{path},{standard}\n")
 
 
 canon.set_defaults(func=canon_mol)
+
+
+show_db = subparsers.add_parser("showdb")
+show_db.add_argument("-def", "--default", help="Set database as default for a particular mode")
+
+
+def get_db(args):
+    with open(database_path, "r") as db_file:
+        content1 = db_file.readlines()
+    with open(database_global, "r") as global_db:
+        content2 = global_db.readlines()
+    content = content1 + content2
+    db_shortcut = []
+    db_path = []
+    db_standard = []
+    for line in content:
+        database = line.strip().split(",")
+        try:
+            db_shortcut.append(database[0])
+        except IndexError:
+            db_shortcut.append("")
+        try:
+            db_path.append(database[1])
+        except IndexError:
+            db_path.append("")
+        try:
+            db_standard.append(database[2])
+        except IndexError:
+            db_standard.append("")
+    if args.default:
+        modes = ["substructure", "fpsim", "rocs", "omrocs"]
+        validate = args.default.split(":")
+        if validate[0] in modes:
+            if validate[1] in db_shortcut:
+                with open(f"{home}/.vsflow/DEFAULT_DB.csv", "r") as default_file:
+                    dbs = default_file.readlines()
+                for i in range(len(dbs)):
+                    if dbs[i].startswith(f"{validate[0]},"):
+                        dbs[i] = f"{validate[0]},{validate[1]}\n"
+                if f"{validate[0]},{validate[1]}\n" not in dbs:
+                    dbs.append(f"{validate[0]},{validate[1]}\n")
+                with open(f"{home}/.vsflow/DEFAULT_DB.csv", "w") as default_file:
+                    for line in dbs:
+                        default_file.writelines(line)
+                print(f"{validate[1]} database has been set as default for mode {validate[0]}.\nYou can now use the database"
+                      f" in mode {validate[0]} without calling the -db flag.")
+            else:
+                print(f"Database '{validate[1]}' is not integrated in VSFlow. Use preparedb -h to see how a database can be integrated.")
+        else:
+            print("Default database can only be set for mode substructure, fpsim, rocs and omrocs")
+    else:
+        try:
+            print("shortcut" + " " * (max([len(string) for string in db_shortcut]) + 5 - len("shortcut")) + "path" + " "
+                  *(max([len(string) for string in db_path]) + 5 - len("path")) + "standardized\n")
+        except ValueError:
+            print("No databases integrated in VSFlow. Use preparedb -h to see how a database can be integrated.")
+            exit()
+        for i in range(len(db_shortcut)):
+            print(f"{db_shortcut[i]}" + " "*(max([len(string) for string in db_shortcut]) + 5 - len(db_shortcut[i])) +
+                  f"{db_path[i]}" + " "*(max([len(string) for string in db_path]) + 5 - len(db_path[i])) + f"{db_standard[i]}")
+        print("\n")
+        print("You can set (or change) a default database for the mode substructure, fpsim, rocs and omrocs by calling showdb -default "
+              "{mode}:{shortcut}")
+
+
+
+
+show_db.set_defaults(func=get_db)
+
+
 
 
 def main():
