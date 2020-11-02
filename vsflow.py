@@ -23,21 +23,16 @@ from rdkit.Chem import Descriptors
 from rdkit.Chem import Draw, MACCSkeys
 from rdkit.Chem.AtomPairs import Pairs, Torsions
 from rdkit.Chem.Draw import SimilarityMaps
-# from rdkit.Chem.MolStandardize.rdMolStandardize import TautomerEnumerator
 from molvs.tautomer import TautomerCanonicalizer
 from molvs.standardize import Standardizer
 import matplotlib as mpl
 mpl.rc('figure', max_open_warning=0)
-# from pathlib import Path
-# home = str(Path.home())
-# print(home)
 RDLogger.logger().setLevel(RDLogger.CRITICAL)
 
 ## set paths for DATABASES.csv file and cache directory for pdf output
 
 script_path = os.path.dirname(os.path.abspath(__file__))
 home = os.path.expanduser("~")
-# database_path = f"{script_path}/DATABASES.csv"
 database_path = f"{home}/.vsflow/DATABASES.csv"
 database_global = f"{script_path}/DATABASES.csv"
 ttf_path = f"{script_path}/resources/DejaVuSansMono.ttf"
@@ -46,7 +41,6 @@ set_global("FPDF_CACHE_DIR", script_path)
 
 ## Read path of integrated databases in DATABASES.csv or generate directory
 DATABASES = {}
-# IDENTITY = {}
 STANDARD = {}
 if ".vsflow" in os.listdir(home):
     if "DATABASES.csv" in os.listdir(f"{home}/.vsflow"):
@@ -57,32 +51,17 @@ if ".vsflow" in os.listdir(home):
                 continue
             else:
                 DATABASES[line[0]] = line[1]
-                # try:
-                #     IDENTITY[line[0]] = line[2]
-                # except IndexError:
-                #     IDENTITY[line[0]] = ""
                 try:
                     STANDARD[line[0]] = line[2]
                 except IndexError:
                     STANDARD[line[0]] = ""
-        #default_db = list(DATABASES.keys())[0]
-        # except FileNotFoundError:
-        #     DATABASES = {}
-        #     # IDENTITY = {}
-        #     STANDARD = {}
-        #     default_db = ""
-        default_db = ""
     else:
         with open(database_path, "w") as db_file:
             db_file.write("")
-        # DATABASES = {}
-        # STANDARD = {}
-        default_db = ""
 else:
     os.mkdir(f"{home}/.vsflow")
     with open(database_path, "w") as db_file:
         db_file.write("")
-    default_db = ""
 try:
     with open(database_global, "r") as global_db:
         content = global_db.readlines()
@@ -106,9 +85,9 @@ if "DEFAULT_DB.csv" in os.listdir(f"{home}/.vsflow"):
 else:
     with open(f"{home}/.vsflow/DEFAULT_DB.csv", "w") as db_default:
         db_default.write("")
-print(DEFAULT_DB)
 
-parser = argparse.ArgumentParser(description='''\
+parser = argparse.ArgumentParser(description="Virtual Screening Workflow")
+print('''\
 **************************
 
  VV        VV  SSSSSSS            VSFlow   
@@ -280,67 +259,6 @@ def export_page(counter, image_list, results, prop_dict):
     out = f"page_{counter}.pdf"
     pdf.output(out)
     return out
-
-
-
-# def export_page(counter, image_list, results, prop_dict):
-#     page_mols = image_list[counter:counter + 3]
-#     page_props = results[counter:counter + 3]
-#     img_place_y = 10
-#     txt_place_y = 6
-#     num_place_y = 98
-#     pdf = FPDF()
-#     pdf.add_page()
-#     pdf.add_font("DejaVu", "", ttf_path, uni=True)
-#     pdf.set_font("DejaVu", "", 11)
-#     for i in range(len(page_mols)):
-#         pdf.image(page_mols[i], 10, img_place_y, 90)
-#         pdf.rect(10, img_place_y, 190, 90)
-#         pdf.dashed_line(100, img_place_y, 100, img_place_y + 90)
-#         pdf.text(12, num_place_y, str(counter + i + 1))
-#         img_place_y += 94
-#         num_place_y += 94
-#         txt_space_y = 10
-#         line_counter = 0
-#         for tag in page_props[i][prop_dict].items():
-#             entry_length = len(str(tag[0])) + len(str(tag[1])) + 2
-#             if entry_length < 40:
-#                 line_counter += 1
-#             else:
-#                 line_counter += 2
-#         print(line_counter)
-#         for tag in page_props[i][prop_dict].items():
-#             string = f"{tag[0]}: {tag[1]}"
-#             str_fact = 0
-#             str_space = 0
-#             if len(string) < 40:
-#                 pdf.text(103, txt_place_y + txt_space_y, string)
-#                 txt_space_y += 6
-#             else:
-#                 if len(string) <= 80:
-#                     while str_fact < len(string) - 40:
-#                         pdf.text(103, txt_place_y + txt_space_y + str_space, string[str_fact:str_fact + 40])
-#                         str_space += 5
-#                         str_fact += 40
-#                     if str_fact >= len(string) - 40:
-#                         pdf.text(103, txt_place_y + txt_space_y + str_space, string[str_fact:len(string)])
-#                         str_space += 5
-#                     txt_space_y = txt_space_y + str_space + 1
-#                 else:
-#                     write_string = string[:77] + "..."
-#                     while str_fact < len(write_string) - 40:
-#                         pdf.text(103, txt_place_y + txt_space_y + str_space, write_string[str_fact:str_fact + 40])
-#                         str_space += 5
-#                         str_fact += 40
-#                     if str_fact >= len(write_string) - 40:
-#                         pdf.text(103, txt_place_y + txt_space_y + str_space, write_string[str_fact:len(write_string)])
-#                         str_space += 5
-#                     txt_space_y = txt_space_y + str_space + 1
-#         txt_place_y += 94
-#     out = f"page_{counter}.pdf"
-#     pdf.output(out)
-#     return out
-
 
 
 def write_pdf(pages, out_file):
@@ -622,15 +540,6 @@ def sub_pdf(pool_sub, grids, results, out_name, properties):
     pages = pool_sub.starmap(export_page, [(j, grids, results, 5) for j in counter])
     mol_factor = 3
     pdf_out(pages, len(grids), f"{out_name}.pdf", mol_factor)
-    # if properties:
-    #     counter = gen_counter(grids, 3)
-    #     pages = pool_sub.starmap(export_page, [(j, grids, results, 5) for j in counter])
-    #     mol_factor = 3
-    # else:
-    #     counter = gen_counter(grids, 6)
-    #     pages = pool_sub.starmap(export_page_id, [(j, grids, results) for j in counter])
-    #     mol_factor = 6
-    # pdf_out(pages, len(grids), f"{out_name}.pdf", mol_factor)
 
 
 def read_db(database):
@@ -646,20 +555,6 @@ def read_db(database):
         except OSError:
             substructure.error(message=f"File {database} not found. Please make sure you specified the correct path!")
     return data
-
-
-# def read_id(database, identity):
-#     if database in IDENTITY:
-#         if IDENTITY[database]:
-#             ident = IDENTITY[database]
-#         else:
-#             ident = "_Name"
-#     else:
-#         if identity:
-#             ident = identity
-#         else:
-#             ident = "_Name"
-#     return ident
 
 
 def prop_filt(filtered, filter_dict, results, prop_func, key):
@@ -827,7 +722,6 @@ def sub_search(args):
         filter_dict = check_filter(args.filter)
     # read input files or input strings
     data = read_db(args.database)
-    # identity = read_id(args.database, args.identity)
     if args.database in DATABASES:
         if args.standard:
             query = read_input_std(pool_sub, args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
@@ -848,20 +742,12 @@ def sub_search(args):
         else:
             query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column,
                                args.delimiter, args.header)
-    # query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
-    #                    args.header)
     print(f"Finished reading query molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
-    # data_names = [(mol, mol.GetProp(identity)) for mol in data if mol]
     data_names = [(data[i], i) for i in range(len(data)) if data[i]]
-    # for mol in data:
-    #     if mol:
-    #         name = mol.GetProp(identity)
-    #         data_names.append((mol, name))
     argslist = [(mol[0], mol[1], query_mol[0], query_mol[1], args.fullmatch) for mol in data_names for query_mol in
                 query]
     print(f"Finished reading database: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # perform substructure search
-
     sub_results = pool_sub.starmap(substruct, argslist)
     print(f"Finished substructure search: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # sort and filter substructure results
@@ -869,7 +755,6 @@ def sub_search(args):
     if args.filter:
         results = filter_res(filter_dict, results)
     # set properties for output files
-    # results = set_props_sub(args.properties, results, identity)
     results = set_props_2(results, data_names, args.properties)
     # generate output files
     if args.fullmatch:
@@ -1164,18 +1049,10 @@ def fp_search(args):
         else:
             query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column,
                                args.delimiter, args.header)
-    # query = read_input(args.smiles, args.smarts, args.input, args.input_format, args.smiles_column, args.delimiter,
-    #                    args.header)
     print(f"Finished reading query molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     data_names = [(data[i], i) for i in range(len(data)) if data[i]]
-    # data_names = []
-    # for mol in data:
-    #     if mol:
-    #         name = mol.GetProp(identity)
-    #         data_names.append((mol, name))
     print(f"Finished reading database: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # calculate fingerprints and similarities
-
     if args.fingerprint == "rdkit":
         fp_name = f"RDKitFingerprint {args.NBITS} bit"
         fp_query = fp_pool.starmap(query_fp_rdkit, [(query_mol[0], query_mol[1], args.NBITS) for query_mol in query])
