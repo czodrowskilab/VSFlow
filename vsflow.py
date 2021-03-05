@@ -29,6 +29,8 @@ import matplotlib as mpl
 mpl.rc('figure', max_open_warning=0)
 RDLogger.logger().setLevel(RDLogger.CRITICAL)
 
+
+## test
 ## set paths for DATABASES.csv file and cache directory for pdf output
 
 script_path = os.path.dirname(os.path.abspath(__file__))
