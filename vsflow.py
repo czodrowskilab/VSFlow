@@ -10,7 +10,7 @@ from itertools import groupby
 import pandas as pd
 import requests
 import xlsxwriter
-from bs4 import BeautifulSoup
+#from bs4 import BeautifulSoup
 from fpdf import FPDF, set_global
 from pdfrw import PdfReader
 from pdfrw import PdfWriter
