@@ -28,6 +28,8 @@ from rdkit.Chem.Draw import SimilarityMaps
 from molvs.tautomer import TautomerCanonicalizer, TautomerEnumerator
 from molvs.standardize import Standardizer
 import matplotlib as mpl
+from rdkit.Chem import rdMolAlign
+from rdkit.Chem.Pharm2D import Gobbi_Pharm2D, Generate
 from xlrd import open_workbook
 mpl.rc('figure', max_open_warning=0)
 RDLogger.logger().setLevel(RDLogger.CRITICAL)
@@ -66,14 +68,18 @@ for key in config:
                 if file.rsplit(".vsdb", maxsplit=1)[0] in db_config:
                     if db_config[file.rsplit(".vsdb", maxsplit=1)[0]][0] == time.ctime(os.path.getmtime(f"{config[key]}/{file}")):
                         continue
+                print("Updating databases")
                 db = pickle.load(open(f"{config[key]}/{file}", "rb"))
-                n_mols = len(db)
-                standardized = "no"
-                for n in db:
-                    if "mol_sta" in db[n]:
-                        standardized = "yes"
-                        break
-                db_config[file.rsplit(".vsdb", maxsplit=1)[0]] = [time.ctime(os.path.getmtime(f"{config[key]}/{file}")), standardized, n_mols]
+                db_info = db["config"]
+                n_mols = db_info[2]
+                standardized = db_info[0]
+                n_confs = db_info[1]
+                num_seed = db_info[3]
+                db_config[file.rsplit(".vsdb", maxsplit=1)[0]] = [time.ctime(os.path.getmtime(f"{config[key]}/{file}")),
+                                                                  standardized,
+                                                                  n_confs,
+                                                                  n_mols,
+                                                                  num_seed]
                 del db
     except FileNotFoundError:
         continue
@@ -96,7 +102,6 @@ for db_info in db_config:
                     to_remove.append(db_info)
             except FileNotFoundError:
                 pass
-print(to_remove)
 for entry in to_remove:
     db_config.pop(entry)
     if entry == db_default:
@@ -252,37 +257,6 @@ def read_input(args):
     return query
 
 
-def set_key(args, mols):
-    key = "mol"
-    if args.database in db_config:
-        if db_config[args.database][1] == "yes":
-            if args.mode == "std":
-                key = "mol_sta"
-            elif args.mode == "can_taut":
-                key = "mol_can"
-            elif args.mode == "all_tauts":
-                key = "mol_sta"
-            else:
-                key = "mol"
-        else:
-            key = "mol"
-    else:
-        for n in mols:
-            if "mol_sta" in mols[n]:
-                if args.mode == "std":
-                    key = "mol_sta"
-                elif args.mode == "can_taut":
-                    key = "mol_can"
-                elif args.mode == "all_tauts":
-                    key = "mol_sta"
-                else:
-                    key = "mol"
-            else:
-                key = "mol"
-            break
-    return key
-
-
 def substruct(args):
     start_time = time.time()
     print(f"Start: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
@@ -328,6 +302,7 @@ def substruct(args):
                                                "format")
         else:
             substructure.error(message=f"File {args.database} not found. Please make sure you specified the correct path")
+    db_desc = mols.pop("config")
     ### Read input query
     print("Reading input molecules ...")
     if args.smarts:
@@ -360,33 +335,17 @@ def substruct(args):
     print("Performing substructure search ...")
     sub_time = time.time()
     results = {}
-    key = "mol"
-    if args.database in db_config:
-        if db_config[args.database][1] == "yes":
-            if args.mode == "std":
-                key = "mol_sta"
-            elif args.mode == "can_taut":
-                key = "mol_can"
-            elif args.mode == "all_tauts":
-                key = "mol_sta"
-            else:
-                key = "mol"
+    if db_desc[0] == "yes":
+        if args.mode == "std":
+            key = "mol_sta"
+        elif args.mode == "can_taut":
+            key = "mol_can"
+        elif args.mode == "all_tauts":
+            key = "mol_sta"
         else:
             key = "mol"
     else:
-        for n in mols:
-            if "mol_sta" in mols[n]:
-                if args.mode == "std":
-                    key = "mol_sta"
-                elif args.mode == "can_taut":
-                    key = "mol_can"
-                elif args.mode == "all_tauts":
-                    key = "mol_sta"
-                else:
-                    key = "mol"
-            else:
-                key = "mol"
-            break
+        key = "mol"
     if args.fullmatch:
         if args.mpi_np:
             if args.mode == "std" or args.mode == "mol_can":
@@ -474,7 +433,7 @@ group_fp.add_argument("-smi", "--smiles", help="specify smiles on command line",
 group_fp.add_argument("-sma", "--smarts", help="specify smiles on command line", action="append")
 fp_sim.add_argument("-m", "--mode", help="choose a mode for substructure search", choices=["std", "all_tauts",
                                                                                                  "can_taut", "no_std"],
-                          default="no_std")
+                          default="std")
 fp_sim.add_argument("-np", "--mpi_np", type=int,
                     help="Specifies the number of processors n when the application is run in"
                          " MPI mode.")
@@ -520,12 +479,23 @@ def fingerprint(args):
     print(f"Loading database {args.database} ...")
     sub_time = time.time()
     mols = read_database(args, pool)
+    db_desc = mols.pop("config")
     sub_time_2 = time.time()
     sub_dur = sub_time_2 - sub_time
     print(sub_dur)
     print("Reading query input ...")
     query = read_input(args)
-    key = set_key(args, mols)
+    if db_desc[0] == "yes":
+        if args.mode == "std":
+            key = "mol_sta"
+        elif args.mode == "can_taut":
+            key = "mol_can"
+        elif args.mode == "all_tauts":
+            key = "mol_sta"
+        else:
+            key = "mol"
+    else:
+        key = "mol"
     print("Calculating fingerprints ...")
     sub_time = time.time()
     features = False
@@ -648,8 +618,11 @@ def fingerprint(args):
                 else:
                     out_file = f"{args.output}.pdf"
                 if args.simmap:
-                    print(f"Calculating similarity maps for {len(results)} matches ...")
-                    visualize.fp_maps(results, query, args.fingerprint, args.radius, args.NBITS, features, args.similarity, out_file, ttf_path, args.multfile)
+                    if args.fingerprint == "MACCS":
+                        visualize.gen_pdf(query, results, out_file, ttf_path)
+                    else:
+                        print(f"Calculating similarity maps for {len(results)} matches ...")
+                        visualize.fp_maps(results, query, args.fingerprint, args.radius, args.NBITS, features, args.similarity, out_file, ttf_path, args.multfile)
                 else:
                     visualize.gen_pdf(query, results, out_file, ttf_path)
     end_time = time.time()
@@ -665,6 +638,165 @@ fp_sim.set_defaults(func=fingerprint)
 
 
 shape_sim = subparsers.add_parser("shape")
+shape_group = shape_sim.add_mutually_exclusive_group(required=True)
+shape_group.add_argument("-in", "--input")
+shape_group.add_argument("-smi", "--smiles", action="append")
+shape_sim.add_argument("-db", "--database", default=db_default)
+shape_sim.add_argument("-np", "--mpi_np", type=int)
+
+
+def shape_from_smiles(mol, i, num_confs, seed):
+    factory = Gobbi_Pharm2D.factory
+    mol_H = Chem.AddHs(mol)
+    Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, randomSeed=seed, ETversion=2, numThreads=0)
+    try:
+        Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0)
+    except:
+        pass
+    mol_3D = Chem.RemoveHs(mol_H)
+    # query[i]["confs"] = mol_3D
+    # query[i]["param"] = Chem.MMFFGetMoleculeProperties(mol_3D)
+    # mol_params = Chem.MMFFGetMoleculeProperties(mol_3D)
+    # print(type(mol_params))
+    fp_mol = Generate.Gen2DFingerprint(mol_3D, factory, dMat=Chem.Get3DDistanceMatrix(mol_3D, confId=0))
+    return (i, mol_3D, fp_mol)#mol_params)#, fp_mol
+
+
+def algn_mols(db_mol, i, query_mol, query_fp, j):
+    factory = Gobbi_Pharm2D.factory
+    algns = rdMolAlign.GetO3AForProbeConfs(db_mol, query_mol,
+                                           prbPyMMFFMolProperties=Chem.MMFFGetMoleculeProperties(db_mol),
+                                           refPyMMFFMolProperties=Chem.MMFFGetMoleculeProperties(query_mol), refCid=0, numThreads=0)
+    shape_simis = []
+    pharm_simis = []
+    for k in range(len(algns)):
+        algns[k].Align()
+        shape_simis.append((1 - Chem.ShapeTanimotoDist(db_mol, query_mol, confId1=k, confId2=0), k))
+        fp_db = Generate.Gen2DFingerprint(db_mol, factory,
+                                          dMat=Chem.Get3DDistanceMatrix(db_mol, confId=k))
+        pharm_simis.append((DataStructs.TanimotoSimilarity(query_fp, fp_db), k))
+    max_shape_simis = max(shape_simis)[0]
+    max_pharm_simis = max(pharm_simis)[0]
+    combo = max(shape_simis)[0] + max(pharm_simis)[0]
+    return (combo, max_shape_simis, max_pharm_simis, j, i, max(shape_simis)[1])
+
+
+def shape(args):
+    mols = {}
+    if args.database in db_config:
+        try:
+            mols = pickle.load(open(f"{config['local_db']}/{args.database}.vsdb", "rb"))
+        except FileNotFoundError:
+            try:
+                mols = pickle.load(open(f"{config['global_db']}/{args.database}.vsdb", "rb"))
+            except FileNotFoundError:
+                parser.error(
+                    message=f"{args.database} not found. Please make sure you specified the correct shortcut")
+    else:
+        if os.path.exists(args.database):
+            if args.database.endswith(".vsdb"):
+                try:
+                    mols = pickle.load(open(args.database, "rb"))
+                except:
+                    parser.error(message=f"{args.database} could not be opened. Please make sure the file has the correct "
+                                               f"format")
+            else:
+                parser.error(message="Database must be in format .vsdb. Use mode preparedb to prepare a database for"
+                                     " shape similarity screening.")
+        else:
+            parser.error(message=f"{args.database} could not be opened. Please make sure you specified the correct path")
+    # for i in mols:
+    #     try:
+    #         test_confs = mols[i]["confs"]
+    #     except KeyError:
+    #         parser.error(message=f"Database {args.database} does not contain conformers. Use mode preparedb to generate "
+    #                              f"conformers and prepare a database for shape similarity screening")
+    #     break
+
+    db_desc = mols.pop("config")
+    if db_desc[1] == 0:
+        parser.error(message=f"Database {args.database} does not contain conformers. Use mode preparedb to generate "
+                             f"conformers and prepare a database for shape similarity screening")
+    seed = db_desc[3]
+    num_confs = db_desc[1]
+    factory = Gobbi_Pharm2D.factory
+    if args.smiles:
+        if args.mpi_np:
+            query = read.read_smiles_shape(args.smiles)
+            pool_shape = mp.Pool(processes=args.mpi_np)
+            query_confs = pool_shape.starmap(shape_from_smiles, [(query[i]["mol"], i, num_confs, seed) for i in query])
+            print(query_confs)
+            for entry in query_confs:
+                query[entry[0]]["confs"] = entry[1]
+                query[entry[0]]["fp_shape"] = entry[2]
+            print(query)
+            aligns = pool_shape.starmap(algn_mols, [(mols[i]["confs"], i, query[j]["confs"], query[j]["fp_shape"], j)
+                                                    for i in mols for j in query])
+            print(aligns)
+            print(max(aligns))
+            aligns = sorted(aligns, reverse=True)
+            #top_hits = sorted(aligns, reverse=True)[:10]
+            grouped = [res[:10] for res in (list(group) for k, group in groupby(aligns, lambda x: x[3]))]
+            results = {}
+            counter = 0
+            for entry in grouped:
+                for feat in entry:
+                    mols[feat[4]]["props"]["Combo_Score"] = feat[0]
+                    mols[feat[4]]["props"]["Shape_Similarity"] = feat[1]
+                    mols[feat[4]]["props"]["3D_FP_Similarity"] = feat[2]
+                    mols[feat[4]]["props"]["QuerySmiles"] = query[feat[3]]["pattern"]
+                    results[counter] = {"mol": mols[feat[4]]["confs"], "props": mols[feat[4]]["props"], "top_conf": feat[5],
+                                        "q_num": feat[3]}
+                    counter += 1
+            with open(f"test.sdf", "w") as out:
+                for i in results:
+                    write_output.write_sdf_conformer(results[i]["mol"], results[i]["props"], results[i]["top_conf"], out)
+            print(results)
+            pool_shape.close()
+        else:
+            query = read.read_smiles_shape(args.smiles)
+            score = []
+            for i in query:
+                mol_H = Chem.AddHs(query[i]["mol"])
+                Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, randomSeed=seed, ETversion=2, numThreads=0)
+                try:
+                    Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0)
+                except:
+                    pass
+                mol_3D = Chem.RemoveHs(mol_H)
+                #query[i]["confs"] = mol_3D
+                #query[i]["param"] = Chem.MMFFGetMoleculeProperties(mol_3D)
+                mol_params = Chem.MMFFGetMoleculeProperties(mol_3D)
+                fp_mol = Generate.Gen2DFingerprint(mol_3D, factory, dMat=Chem.Get3DDistanceMatrix(mol_3D, confId=0))
+                counter = 0
+                for j in mols:
+                    algns = rdMolAlign.GetO3AForProbeConfs(mols[j]["confs"], mol_3D,
+                                                   prbPyMMFFMolProperties=Chem.MMFFGetMoleculeProperties(mols[j]["confs"]),
+                                                   refPyMMFFMolProperties=mol_params, refCid=0, numThreads=0)
+                    shape_simis = []
+                    pharm_simis = []
+                    for k in range(len(algns)):
+                        algns[k].Align()
+                        shape_simis.append((1 - Chem.ShapeTanimotoDist(mols[j]["confs"], mol_3D, confId1=k, confId2=0), k))
+                        fp_db = Generate.Gen2DFingerprint(mols[j]["confs"], factory, dMat=Chem.Get3DDistanceMatrix(mols[j]["confs"], confId=k))
+                        pharm_simis.append((DataStructs.TanimotoSimilarity(fp_mol, fp_db), k))
+                    max_shape_simis = max(shape_simis)[0]
+                    max_pharm_simis = max(pharm_simis)[0]
+                    combo = max(shape_simis)[0] + max(pharm_simis)[0]
+                    score.append((combo, max_shape_simis, max_pharm_simis, j, i))
+                    print(counter)
+                    counter += 1
+            print(max(score))
+
+
+
+
+
+
+
+
+shape_sim.set_defaults(func=shape)
+
 
 
 
@@ -674,7 +806,7 @@ canon_group_2 = canon.add_mutually_exclusive_group(required=True)
 canon.add_argument("-in", "--input", required=True)
 canon.add_argument("-np", "--mpi", type=int)
 canon_group_2.add_argument("-out", "--output")
-canon_group_2.add_argument("-int", "--integrate", help="specify name of database")
+canon_group_2.add_argument("-int", "--integrate", help="specify shortcut for database")
 canon.add_argument("-intg", "--int_global", help="Stores database by default within the folder of the script", action="store_true")
 canon.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated during standardization process", type=int, default=100)
 canon.add_argument("-st", "--standardize", help="standardizes molecules, removes salts and associated charges", action="store_true")
@@ -875,6 +1007,7 @@ def canon_mol(args):
                 mols[i]["confs"] = mol_H
                 counter += 1
                 print(counter)
+    mols["config"] = [standardized, conformers, len(mols), seed]
 
     #pickle.dump(mols, open(f"{db_path}/{db_name}.vsdb", "wb"))
     pickle.dump(mols, open(out_path, "wb"))
