@@ -574,7 +574,10 @@ def fingerprint(args):
             fpsearch.fp_maccs(mols, key)
             fpsearch.fp_maccs(query, "mol")
     print("Calculating similarities ...")
-    results = fpsearch.sim(mols, query, key, args.cutoff, args.similarity, filter_dict, name)
+    if args.cutoff:
+        results = fpsearch.sim(mols, query, key, args.cutoff, args.similarity, filter_dict, name)
+    else:
+        results = fpsearch.sim_top(mols, query, key, args.top_hits, args.similarity, filter_dict, name)
     sub_time_2 = time.time()
     sub_dur = sub_time_2 - sub_time
     print(sub_dur)
