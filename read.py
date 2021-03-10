@@ -72,6 +72,16 @@ def read_smarts(smarts):
     return sub
 
 
+def read_smiles_shape(smiles):
+    sub = {}
+    for i in range(len(smiles)):
+        mol = Chem.MolFromSmiles(smiles[i])
+        if mol:
+            mol_std = query_standardize(mol)
+            sub[i] = {"mol": mol_std, "pattern": smiles[i]}
+    return sub
+
+
 def read_sd(infile, mode, ntauts):
     sub = {}
     with open(infile, "r") as sd_file:
@@ -371,9 +381,12 @@ def read_db_from_sd(infile):
         mol_block_list = sd_blocks[i][:sd_blocks[i].index("M  END\n") + 1]
         mol_block = ''.join([elem for elem in mol_block_list])
         mol = Chem.MolFromMolBlock(mol_block)
+        name = mol.GetProp("_Name")
         if mol:
             tags = sd_blocks[i][sd_blocks[i].index("M  END\n") + 1:]
             props = {}
+            if name:
+                props["Title"] = name
             for line in tags:
                 if line.startswith(">  <") and not line.strip("\n").endswith(">"):
                     line_strip = line.strip("\n").strip(">  <")
@@ -403,9 +416,12 @@ def read_mol_block(block):
     mol_block_list = block[:block.index("M  END\n") + 1]
     mol_block = ''.join([elem for elem in mol_block_list])
     mol = Chem.MolFromMolBlock(mol_block)
+    name = mol.GetProp("_Name")
     if mol:
         tags = block[block.index("M  END\n") + 1:]
         props = {}
+        if name:
+            props["Title"] = name
         for line in tags:
             if line.startswith(">  <") and not line.strip("\n").endswith(">"):
                 line_strip = line.strip("\n").strip(">  <")
