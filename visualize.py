@@ -247,10 +247,9 @@ def fp_maps(results, query, fingerprint, fpradius, nbits, features, metric, out_
         fp_func = lambda m, idx: SimilarityMaps.GetRDKFingerprint(m, atomId=idx, fpType="bv", nBits=nbits)
     elif fingerprint == "ap":
         fp_func = lambda m, idx: SimilarityMaps.GetAPFingerprint(m, atomId=idx, fpType="bv", nBits=nbits)
-    elif fingerprint == "tt":
-        fp_func = lambda m, idx: SimilarityMaps.GetTTFingerprint(m, atomId=idx, fpType="bv", nBits=nbits)
     else:
-        pass
+        #fingerprint == "tt":
+        fp_func = lambda m, idx: SimilarityMaps.GetTTFingerprint(m, atomId=idx, fpType="bv", nBits=nbits)
     if multfile:
         sim_map_mf(results, query, fp_func, metric, out_file, ttf_path)
     else:
