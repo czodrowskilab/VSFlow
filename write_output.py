@@ -7,10 +7,35 @@ import csv
 
 def write_sdf(mol, props, output):
     block = Chem.MolToMolBlock(mol).rstrip("\n").split("\n")
+    try:
+        block[0] = props["Title"]
+    except KeyError:
+        pass
+    block[1] = "   VSFlow 1.0 (RDKit 3D)"
+    # for line in block:
+    #     if line.startswith("     RDKit          2D"):
+    #         new_line = "   VSFlow 1.0 (RDKit 2D)"
+    #         block[block.index("     RDKit          2D")] = new_line
+    for tag in props.items():
+        block.append(f">  <{tag[0]}>")
+        block.append(f"{tag[1]}")
+        block.append("")
     for line in block:
-        if line.startswith("     RDKit          2D"):
-            new_line = "   VSFlow 1.0 (RDKit 2D)"
-            block[block.index("     RDKit          2D")] = new_line
+        output.write(f"{line}\n")
+    output.write("$$$$\n")
+
+
+def write_sdf_conformer(mol, props, confId, output):
+    block = Chem.MolToMolBlock(mol, confId=confId).rstrip("\n").split("\n")
+    try:
+        block[0] = props["Title"]
+    except KeyError:
+        pass
+    block[1] = "   VSFlow 1.0 (RDKit 3D)"
+    # for line in block:
+    #     if line.startswith("     RDKit          3D"):
+    #         new_line = "   VSFlow 1.0 (RDKit 3D)"
+    #         block[block.index("     RDKit          3D")] = new_line
     for tag in props.items():
         block.append(f">  <{tag[0]}>")
         block.append(f"{tag[1]}")
@@ -58,18 +83,6 @@ def prepare_lines(mol, props, sorteddict, lines):
         line[sorteddict[prop]] = props[prop]
     lines.append(line)
 
-
-# def set_query_info(query, mol, props):
-#     counter = 0
-#     for m in query:
-#         if hasattr(mol, f"__query_{m}"):
-#             if counter == 0:
-#                 props["QuerySmiles"] = getattr(mol, f"__query_{m}")
-#                 props["MatchAtoms"] = getattr(mol, f"__prop_{m}")
-#             else:
-#                 props[f"QuerySmiles_{counter}"] = getattr(mol, f"__query_{m}")
-#                 props[f"MatchAtoms_{counter}"] = getattr(mol, f"__prop_{m}")
-#             counter += 1
 
 
 def gen_csv_xls_mult(query, results, output):
