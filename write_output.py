@@ -2,6 +2,7 @@ from rdkit.Chem import AllChem as Chem
 import xlsxwriter
 import os
 import csv
+from pymol import cmd
 
 
 
@@ -147,3 +148,15 @@ def gen_sdf(results, output):
         for n in results:
             #set_query_info(query, results[n][0], results[n][1])
             write_sdf(results[n]["mol"], results[n]["props"], out)
+
+
+def export_pymol(file1, file2):
+    #py_object1 = file1.rsplit(".sdf", maxsplit=1)[0]
+    py_object2 = file2.rsplit(".sdf", maxsplit=1)[0]
+    pref = py_object2.split("/")[-1]
+    #print(py_object2)
+    cmd.load(filename=file1)
+    cmd.load(filename=file2)
+    cmd.split_states(object=pref)
+    cmd.delete(pref)
+    cmd.save(f"{py_object2}.pse")
