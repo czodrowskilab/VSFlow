@@ -644,8 +644,11 @@ shape_sim = subparsers.add_parser("shape")
 shape_group = shape_sim.add_mutually_exclusive_group(required=True)
 shape_group.add_argument("-in", "--input")
 shape_group.add_argument("-smi", "--smiles", action="append")
+shape_sim.add_argument("-out", "--output", default="shape.sdf")
 shape_sim.add_argument("-db", "--database", default=db_default)
 shape_sim.add_argument("-np", "--mpi_np", type=int)
+shape_sim.add_argument("-py", "--pymol", action="store_true")
+shape_sim.add_argument("-top", "--top_hits", default=10, type=int)
 
 
 def shape_from_smiles(mol, i, num_confs, seed):
@@ -682,6 +685,18 @@ def algn_mols(db_mol, i, query_mol, query_fp, j):
     max_pharm_simis = max(pharm_simis)[0]
     combo = max(shape_simis)[0] + max(pharm_simis)[0]
     return (combo, max_shape_simis, max_pharm_simis, j, i, max(shape_simis)[1])
+
+
+def export_pymol(file1, file2):
+    #py_object1 = file1.rsplit(".sdf", maxsplit=1)[0]
+    py_object2 = file2.rsplit(".sdf", maxsplit=1)[0]
+    pref = py_object2.split("/")[-1]
+    #print(py_object2)
+    cmd.load(filename=file1)
+    cmd.load(filename=file2)
+    cmd.split_states(object=pref)
+    cmd.delete(pref)
+    cmd.save(f"{py_object2}.pse")
 
 
 def shape(args):
@@ -722,74 +737,98 @@ def shape(args):
                              f"conformers and prepare a database for shape similarity screening")
     seed = db_desc[3]
     num_confs = db_desc[1]
-    factory = Gobbi_Pharm2D.factory
+
     if args.smiles:
-        if args.mpi_np:
-            query = read.read_smiles_shape(args.smiles)
-            pool_shape = mp.Pool(processes=args.mpi_np)
-            query_confs = pool_shape.starmap(shape_from_smiles, [(query[i]["mol"], i, num_confs, seed) for i in query])
-            print(query_confs)
-            for entry in query_confs:
-                query[entry[0]]["confs"] = entry[1]
-                query[entry[0]]["fp_shape"] = entry[2]
-            print(query)
-            aligns = pool_shape.starmap(algn_mols, [(mols[i]["confs"], i, query[j]["confs"], query[j]["fp_shape"], j)
-                                                    for i in mols for j in query])
-            print(aligns)
-            print(max(aligns))
-            aligns = sorted(aligns, reverse=True)
-            #top_hits = sorted(aligns, reverse=True)[:10]
-            grouped = [res[:10] for res in (list(group) for k, group in groupby(aligns, lambda x: x[3]))]
-            results = {}
+        query = read.read_smiles_shape(args.smiles)
+    if args.mpi_np:
+        pool_shape = mp.Pool(processes=args.mpi_np)
+        query_confs = pool_shape.starmap(shape_from_smiles, [(query[i]["mol"], i, num_confs, seed) for i in query])
+        print(query_confs)
+        for entry in query_confs:
+            query[entry[0]]["confs"] = entry[1]
+            query[entry[0]]["fp_shape"] = entry[2]
+        print(query)
+        aligns = pool_shape.starmap(algn_mols, [(mols[i]["confs"], i, query[j]["confs"], query[j]["fp_shape"], j)
+                                                for i in mols for j in query])
+        print(aligns)
+        print(max(aligns))
+        aligns = sorted(aligns, reverse=True)
+        #top_hits = sorted(aligns, reverse=True)[:10]
+
+
+        pool_shape.close()
+
+    else:
+        factory = Gobbi_Pharm2D.factory
+        score = []
+        for i in query:
+            mol_H = Chem.AddHs(query[i]["mol"])
+            Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, randomSeed=seed, ETversion=2, numThreads=0)
+            try:
+                Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0)
+            except:
+                pass
+            mol_3D = Chem.RemoveHs(mol_H)
+            #query[i]["confs"] = mol_3D
+            #query[i]["param"] = Chem.MMFFGetMoleculeProperties(mol_3D)
+            mol_params = Chem.MMFFGetMoleculeProperties(mol_3D)
+            fp_mol = Generate.Gen2DFingerprint(mol_3D, factory, dMat=Chem.Get3DDistanceMatrix(mol_3D, confId=0))
             counter = 0
-            for entry in grouped:
-                for feat in entry:
-                    mols[feat[4]]["props"]["Combo_Score"] = feat[0]
-                    mols[feat[4]]["props"]["Shape_Similarity"] = feat[1]
-                    mols[feat[4]]["props"]["3D_FP_Similarity"] = feat[2]
-                    mols[feat[4]]["props"]["QuerySmiles"] = query[feat[3]]["pattern"]
-                    results[counter] = {"mol": mols[feat[4]]["confs"], "props": mols[feat[4]]["props"], "top_conf": feat[5],
-                                        "q_num": feat[3]}
-                    counter += 1
-            with open(f"test.sdf", "w") as out:
-                for i in results:
+            for j in mols:
+                algns = rdMolAlign.GetO3AForProbeConfs(mols[j]["confs"], mol_3D,
+                                               prbPyMMFFMolProperties=Chem.MMFFGetMoleculeProperties(mols[j]["confs"]),
+                                               refPyMMFFMolProperties=mol_params, refCid=0, numThreads=0)
+                shape_simis = []
+                pharm_simis = []
+                for k in range(len(algns)):
+                    algns[k].Align()
+                    shape_simis.append((1 - Chem.ShapeTanimotoDist(mols[j]["confs"], mol_3D, confId1=k, confId2=0), k))
+                    fp_db = Generate.Gen2DFingerprint(mols[j]["confs"], factory, dMat=Chem.Get3DDistanceMatrix(mols[j]["confs"], confId=k))
+                    pharm_simis.append((DataStructs.TanimotoSimilarity(fp_mol, fp_db), k))
+                max_shape_simis = max(shape_simis)[0]
+                max_pharm_simis = max(pharm_simis)[0]
+                combo = max(shape_simis)[0] + max(pharm_simis)[0]
+                score.append((combo, max_shape_simis, max_pharm_simis, j, i, max(shape_simis)[1]))
+                print(counter)
+                counter += 1
+        print(max(score))
+        aligns = sorted(score, reverse=True)
+        # top_hits = sorted(aligns, reverse=True)[:10]
+        # grouped = [res[:10] for res in (list(group) for k, group in groupby(aligns, lambda x: x[3]))]
+
+    # prepare and write results to output files
+    grouped = [res[:args.top_hits] for res in (list(group) for k, group in groupby(aligns, lambda x: x[3]))]
+    results = {}
+    counter = 0
+    for entry in grouped:
+        for feat in entry:
+            mols[feat[4]]["props"]["Combo_Score"] = feat[0]
+            mols[feat[4]]["props"]["Shape_Similarity"] = feat[1]
+            mols[feat[4]]["props"]["3D_FP_Similarity"] = feat[2]
+            mols[feat[4]]["props"]["QuerySmiles"] = query[feat[3]]["pattern"]
+            results[counter] = {"mol": mols[feat[4]]["confs"], "props": mols[feat[4]]["props"], "top_conf": feat[5],
+                                "q_num": feat[3]}
+            counter += 1
+    print(results)
+    out_file = args.output.rsplit(".sdf", maxsplit=1)[0]
+    for j in query:
+        with open(f"{out_file}_{j + 1}.sdf", "w") as out:
+            for i in results:
+                if results[i]["q_num"] == j:
                     write_output.write_sdf_conformer(results[i]["mol"], results[i]["props"], results[i]["top_conf"], out)
-            print(results)
-            pool_shape.close()
-        else:
-            query = read.read_smiles_shape(args.smiles)
-            score = []
-            for i in query:
-                mol_H = Chem.AddHs(query[i]["mol"])
-                Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, randomSeed=seed, ETversion=2, numThreads=0)
-                try:
-                    Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0)
-                except:
-                    pass
-                mol_3D = Chem.RemoveHs(mol_H)
-                #query[i]["confs"] = mol_3D
-                #query[i]["param"] = Chem.MMFFGetMoleculeProperties(mol_3D)
-                mol_params = Chem.MMFFGetMoleculeProperties(mol_3D)
-                fp_mol = Generate.Gen2DFingerprint(mol_3D, factory, dMat=Chem.Get3DDistanceMatrix(mol_3D, confId=0))
-                counter = 0
-                for j in mols:
-                    algns = rdMolAlign.GetO3AForProbeConfs(mols[j]["confs"], mol_3D,
-                                                   prbPyMMFFMolProperties=Chem.MMFFGetMoleculeProperties(mols[j]["confs"]),
-                                                   refPyMMFFMolProperties=mol_params, refCid=0, numThreads=0)
-                    shape_simis = []
-                    pharm_simis = []
-                    for k in range(len(algns)):
-                        algns[k].Align()
-                        shape_simis.append((1 - Chem.ShapeTanimotoDist(mols[j]["confs"], mol_3D, confId1=k, confId2=0), k))
-                        fp_db = Generate.Gen2DFingerprint(mols[j]["confs"], factory, dMat=Chem.Get3DDistanceMatrix(mols[j]["confs"], confId=k))
-                        pharm_simis.append((DataStructs.TanimotoSimilarity(fp_mol, fp_db), k))
-                    max_shape_simis = max(shape_simis)[0]
-                    max_pharm_simis = max(pharm_simis)[0]
-                    combo = max(shape_simis)[0] + max(pharm_simis)[0]
-                    score.append((combo, max_shape_simis, max_pharm_simis, j, i))
-                    print(counter)
-                    counter += 1
-            print(max(score))
+        with open(f"{out_file}_{j + 1}_query.sdf", "w") as out_q:
+            write_output.write_sdf_conformer(query[j]["confs"], {"Smiles": query[j]["pattern"]}, 0, out_q)
+    if args.pymol:
+        #path = os.path.dirname(os.path.abspath(args.output))
+        for j in query:
+            #print(f"{out_file}_{j + 1}".split("/")[])
+            #pref = f"{out_file}_{j + 1}_query".split("/")[-1]
+            export_pymol(f"{out_file}_{j + 1}_query.sdf", f"{out_file}_{j + 1}.sdf")
+
+
+
+
+
 
 
 
