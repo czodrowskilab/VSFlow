@@ -1,4 +1,3 @@
-
 from rdkit import DataStructs
 from rdkit.Chem import AllChem as Chem
 from rdkit.Chem import rdMolAlign
@@ -7,12 +6,19 @@ from rdkit.Chem.Pharm2D import Gobbi_Pharm2D, Generate
 
 def gen_query_conf_pfp(query, num_confs, seed):
     factory = Gobbi_Pharm2D.factory
+    params = Chem.ETKDGv3()
+    params.useSmallRingTorsions = True
+    params.useMacrocycleTorsions = True
+    # params.pruneRmsThresh = -1.0
+    params.numThreads = 0
+    params.randomSeed = seed
     for i in query:
         if query[i]["mol"].GetNumConformers() == 0:
             mol_H = Chem.AddHs(query[i]["mol"])
-            Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, randomSeed=seed, ETversion=2, numThreads=0)
+            Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, params=params)
+            #Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, randomSeed=seed, ETversion=2, numThreads=0)
             try:
-                Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0)
+                Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0, maxIters=2000)
             except:
                 pass
             mol_3D = Chem.RemoveHs(mol_H)
