@@ -375,12 +375,12 @@ def read_excel(filename, smiles_column, mode, ntauts):
     return sub
 
 
-def read_file(filename, file_format, smiles_column, delimiter, mode, ntauts):
-    if filename.endswith(".sdf") or file_format == "sdf":
+def read_file(filename, smiles_column, delimiter, mode, ntauts):
+    if filename.endswith(".sdf"):# or file_format == "sdf":
         sub = read_sd(filename, mode, ntauts)
-    elif filename.endswith(".csv") or file_format == "csv":
+    elif filename.endswith(".csv"):# or file_format == "csv":
         sub = read_csv(filename, smiles_column, delimiter, mode, ntauts)
-    elif filename.endswith(".xlsx") or file_format == "xlsx":
+    elif filename.endswith(".xlsx"):# or file_format == "xlsx":
         sub = read_excel(filename, smiles_column, mode, ntauts)
     else:
         sub = {}
