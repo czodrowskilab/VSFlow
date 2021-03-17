@@ -742,7 +742,7 @@ def shape(args):
         for j in query:
             #print(f"{out_file}_{j + 1}".split("/")[])
             #pref = f"{out_file}_{j + 1}_query".split("/")[-1]
-            write_output.export_pymol(f"{out_file}_{j + 1}_query.sdf", f"{out_file}_{j + 1}.sdf")
+            visualize.export_pymol(f"{out_file}_{j + 1}_query.sdf", f"{out_file}_{j + 1}.sdf")
     if args.PDF:
         visualize.gen_pdf_shape(query, results, out_file, ttf_path)
 
