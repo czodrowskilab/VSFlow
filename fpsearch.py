@@ -79,6 +79,23 @@ def sim(mols, query, key, cutoff, similarity, filter_dict, name):
     return results
 
 
+def sim_tver(mols, query, key, cutoff, similarity, filter_dict, name, tva, tvb):
+    results = {}
+    counter = 0
+    for i in mols:
+        for j in query:
+            sim = sim_dict[similarity](mols[i]["fp"], query[j]["fp"], tva, tvb)
+            if sim >= cutoff:
+                filt_mol = filter_res(mols[i][key], filter_dict)
+                if filt_mol:
+                    mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
+                    mols[i]["props"]["Fingerprint"] = name
+                    mols[i]["props"][sim_dict_name[similarity]] = round(sim, 5)
+                    results[counter] = {"mol": mols[i][key], "props": mols[i]["props"], "q_num": j}
+                    counter += 1
+    return results
+
+
 def sim_top(mols, query, key, top_hits, similarity, filter_dict, name):
     results = {}
     simis = []
@@ -100,14 +117,27 @@ def sim_top(mols, query, key, top_hits, similarity, filter_dict, name):
             counter += 1
     return results
 
-    #         filt_mol = filter_res(mols[i][key], filter_dict)
-    #         if filt_mol:
-    #             mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
-    #             mols[i]["props"]["Fingerprint"] = name
-    #             mols[i]["props"][sim_dict_name[similarity]] = round(sim, 5)
-    #             results[counter] = {"mol": mols[i][key], "props": mols[i]["props"], "q_num": j}
-    #             counter += 1
-    # return results
+
+def sim_top_tver(mols, query, key, top_hits, similarity, filter_dict, name, tva, tvb):
+    results = {}
+    simis = []
+    for i in mols:
+        filt_mol = filter_res(mols[i][key], filter_dict)
+        if filt_mol:
+            for j in query:
+                sim = sim_dict[similarity](mols[i]["fp"], query[j]["fp"], tva, tvb)
+                simis.append((sim, i, j))
+    grouped_simis = [list(group) for k, group in groupby(simis, lambda x: x[2])]
+    counter = 0
+    for entry in grouped_simis:
+        nearest_hits = sorted(entry, reverse=True)[:top_hits]
+        for element in nearest_hits:
+            mols[element[1]]["props"]["QuerySmiles"] = query[element[2]]["pattern"]
+            mols[element[1]]["props"]["Fingerprint"] = name
+            mols[element[1]]["props"][sim_dict_name[similarity]] = round(element[0], 5)
+            results[counter] = {"mol": mols[element[1]][key], "props": mols[element[1]]["props"], "q_num": element[2]}
+            counter += 1
+    return results
 
 
 def set_fp_mp(fps, mols):
