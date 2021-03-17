@@ -206,6 +206,25 @@ def gen_pdf(query, results, out_file, ttf_path):
     export_pdf(pages, out_file)
 
 
+def gen_pdf_shape(query, results, out_file, ttf_path):
+    for m in query:
+        mol_keys = []
+        for n in results:
+            if results[n]["q_num"] == m:
+                Chem.Compute2DCoords(results[n]["mol"])
+                acols = {}
+                bcols = {}
+                h_rads = {}
+                h_lw_mult = {}
+                d = rdMolDraw2D.MolDraw2DCairo(600, 600)
+                d.DrawMoleculeWithHighlights(results[n]["mol"], "", acols, bcols, h_rads, h_lw_mult, -1)
+                d.FinishDrawing()
+                d.WriteDrawingText(f"{n}.png")
+                mol_keys.append(n)
+        pages = gen_pdf_pages(mol_keys, results, ttf_path)
+        export_pdf(pages, f"{out_file}_{m + 1}.pdf")
+
+
 def sim_map(results, query, fp_func, metric, out_file, ttf_path):
     for i in results:
         fig, maxweight = SimilarityMaps.GetSimilarityMapForFingerprint(query[results[i]["q_num"]]["mol"], results[i]["mol"],
