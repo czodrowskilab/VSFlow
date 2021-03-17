@@ -5,6 +5,7 @@ from pdfrw import PdfWriter
 from rdkit.Chem import AllChem as Chem
 from rdkit.Chem.Draw import rdMolDraw2D
 from rdkit.Chem.Draw import SimilarityMaps
+from pymol import cmd
 import fpsearch
 
 
@@ -273,5 +274,17 @@ def fp_maps(results, query, fingerprint, fpradius, nbits, features, metric, out_
         sim_map_mf(results, query, fp_func, metric, out_file, ttf_path)
     else:
         sim_map(results, query, fp_func, metric, out_file, ttf_path)
+
+
+def export_pymol(file1, file2):
+    #py_object1 = file1.rsplit(".sdf", maxsplit=1)[0]
+    py_object2 = file2.rsplit(".sdf", maxsplit=1)[0]
+    pref = py_object2.split("/")[-1]
+    #print(py_object2)
+    cmd.load(filename=file1)
+    cmd.load(filename=file2)
+    cmd.split_states(object=pref)
+    cmd.delete(pref)
+    cmd.save(f"{py_object2}.pse")
 
 
