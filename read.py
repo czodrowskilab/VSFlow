@@ -72,7 +72,7 @@ def read_smarts(smarts):
     return sub
 
 
-def read_smiles_shape(smiles):
+def read_smiles_std(smiles):
     sub = {}
     for i in range(len(smiles)):
         mol = Chem.MolFromSmiles(smiles[i])
@@ -123,6 +123,26 @@ def read_sd(infile, mode, ntauts):
             if mol:
                 sub[i] = {"mol": mol, "pattern": Chem.MolToSmiles(mol)}
     return sub
+
+
+def read_sd_3d(infile):
+    sub = {}
+    with open(infile, "r") as sd_file:
+        content = sd_file.readlines()
+    try:
+        sd_blocks = [list(group) for k, group in groupby(content, lambda x: x == "$$$$\n") if not k]
+    except ValueError:
+        return sub
+    del content
+    for i in range(len(sd_blocks)):
+        mol_block_list = sd_blocks[i][:sd_blocks[i].index("M  END\n") + 1]
+        mol_block = ''.join([elem for elem in mol_block_list])
+        mol = Chem.MolFromMolBlock(mol_block)
+        if mol:
+            sub[i] = {"mol": mol, "pattern": Chem.MolToSmiles(mol)}
+    return sub
+
+
 
 
 def read_csv(filename, smiles_column, delimiter, mode, ntauts):
