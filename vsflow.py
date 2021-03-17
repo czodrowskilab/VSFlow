@@ -128,39 +128,44 @@ print('''\
 ''')
 subparsers = parser.add_subparsers(title="mode", help="specify mode of vsflow")
 
+# substructure search
+
 substructure = subparsers.add_parser("substructure", description="perform a substructure search")
 group = substructure.add_mutually_exclusive_group(required=True)
-group.add_argument("-in", "--input", help="input file")
-group.add_argument("-smi", "--smiles", help="specify smiles for substructure search", action="append")
-group.add_argument("-sma", "--smarts", help="specify smarts for substructure search", action="append")
-substructure.add_argument("-out", "--output",
-                          help="specify name of output file. Supported formats are sdf, csv and xlsx."
-                               "If no file extension is provided, all possible files are generated."
-                          , default="vsflow_substructure.sdf")
-substructure.add_argument("-np", "--mpi_np", type=int,
-                          help="Specify the number of processors n to run the application in"
-                               " MPI mode.")
-substructure.add_argument("-pdf", "--PDF", help="generate a pdf file for substructure matches", action="store_true")
-substructure.add_argument("-db", "--database", help="select database or provide path to database", default=db_default)
-substructure.add_argument("-props", "--properties",
-                          help="specifies if calculated molecular properties are written to the output files",
-                          action="store_true")
-substructure.add_argument("-mf", "--multfile", help="generate separate output files for every query molecule",
-                          action="store_true")
-substructure.add_argument("-fi", "--input_format",
-                          help="Specify file typ if no file extension is present in input file name")
-substructure.add_argument("-col", "--smiles_column",
-                          help="Specify name of smiles column in csv file")
-substructure.add_argument("-del", "--delimiter", help="Specify delimiter of csv file")
-# substructure.add_argument("-head", "--header", help="Specify row of file to be used as column names", type=int,
-#                           default=1)
+group.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="")
+group.add_argument("-smi", "--smiles", help="specify SMILES string on command line in double quotes",
+                   action="append", metavar="")
+group.add_argument("-sma", "--smarts", help="specify SMARTS string on command line in double quotes",
+                   action="append", metavar="")
+substructure.add_argument("-d", "--database", help="specify path of the database file [sdf or vsdb] or specify the "
+                                                   "shortcut for an integrated database", default=db_default,
+                          metavar="")
+substructure.add_argument("-o", "--output", help="specify name of output file [default: substructure.sdf]",
+                          default="substructure.sdf", metavar="")
+substructure.add_argument("-m", "--mode", help="choose a mode for substructure search [std, all_tauts, can_taut, "
+                                               "no_std]", choices=["std", "all_tauts", "can_taut", "no_std"],
+                          default="std", metavar="")
+substructure.add_argument("-np", "--nproc", type=int, help="Specify the number of processors used when the application "
+                                                           "is run in multiprocessing mode.", metavar="")
 substructure.add_argument("-fm", "--fullmatch", help="when specified, only full matches are returned",
                           action="store_true")
-substructure.add_argument("-filt", "--filter", help="specify property to filter screening results", action="append")
-substructure.add_argument("-nt", "--ntauts", help="maximum number of tautomers of query molecules to be enumerated", type=int, default=100)
-substructure.add_argument("-m", "--mode", help="choose a mode for substructure search", choices=["std", "all_tauts",
-                                                                                                 "can_taut", "no_std"],
-                          default="no_std")
+substructure.add_argument("-p", "--properties",
+                          help="if specified, calculated molecular properties are written to the output files",
+                          action="store_true")
+substructure.add_argument("-nt", "--ntauts",
+                          help="maximum number of query tautomers to be enumerated in mode all_tauts [default: 100]",
+                          type=int, default=100, metavar="")
+substructure.add_argument("-mf", "--multfile", help="generate separate output files for every query molecule",
+                          action="store_true")
+substructure.add_argument("--filter", help="specify property to filter screening results", action="append", metavar="")
+substructure.add_argument("--mol_column",
+                          help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if not "
+                               "automatically recognized", metavar="")
+substructure.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized",
+                          metavar="")
+substructure.add_argument("--header", help="Specify number of row in csv/xlsx file to be used as column names "
+                                           "[default: 1, e.g. first row]", type=int, default=1, metavar="")
+substructure.add_argument("--pdf", help="generate a pdf file for all results", action="store_true")
 
 
 def check_filter(filter_list):
@@ -214,7 +219,7 @@ def read_database(args):
                                                f"format")
 
             else:
-                if args.mpi_np:
+                if args.nproc:
                     pool = mp.Pool(processes=args.nproc)
                     mols, failed = read.read_sd_mp(args.database, pool)
                     pool.close()
@@ -241,15 +246,15 @@ def read_input(args):
             parser.error(message="No valid molecule(s) could be generated from the provided SMILES.")
     else:
         if os.path.exists(args.input):
-            query = read.read_file(args.input, args.input_format, args.smiles_column, args.delimiter, args.mode, args.ntauts)
+            query = read.read_file(args.input, args.mol_column, args.delimiter, args.mode, args.ntauts)
             if not query:
-                if args.input.endswith(".sdf") or args.input_format == "sdf":
+                if args.input.endswith(".sdf"):# or args.input_format == "sdf":
                     parser.error(message="No valid molecules could be read from SD file.")
-                elif args.input.endswith(".csv") or args.input_format == "csv":
+                elif args.input.endswith(".csv"):# or args.input_format == "csv":
                     parser.error(message="No valid molecules could be read from input file. Please check/specify "
                                                "name of SMILES/InChI containing column (--mol_column) or check/specify the"
                                                "separator (--delimiter)")
-                elif args.input.endswith(".xlsx") or args.input_format == "xlsx":
+                elif args.input.endswith(".xlsx"):# or args.input_format == "xlsx":
                     parser.error(message="No valid molecules could be read from input file. Please check/specify "
                                                "name of SMILES/InChI containing column (--mol_column))")
                 else:
@@ -263,100 +268,70 @@ def read_input(args):
 def substruct(args):
     start_time = time.time()
     print(f"Start: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    # check args.nproc
+    if args.nproc:
+        if 1 < args.nproc < mp.cpu_count():
+            print(f"Running in parallel mode on {args.nproc} threads")
+            pass
+        elif args.nproc <= 1:
+            print("Running in single core mode")
+            args.nproc = None
+        else:
+            args.nproc = mp.cpu_count()
+            print(f"Running in parallel mode on {args.nproc} threads")
+    else:
+        print("Running in single core mode")
+    # check if filter is set correct
     if args.filter:
         filter_dict = check_filter(args.filter)
     else:
         filter_dict = {}
-    pool = None
-    if args.mpi_np:
-        if 1 < args.mpi_np <= mp.cpu_count():
-            pool = mp.Pool(processes=args.mpi_np)
-        else:
-            pool = mp.Pool(processes=int(mp.cpu_count()/2))
-    ### Load database from vsdb file or from SD file
+    # check if output path is valid
+    if "/" in args.output:
+        out_path = args.output.rsplit("/", maxsplit=1)[0]
+        if not os.path.exists(out_path):
+            parser.error(message=f"{args.output} is no valid path. Please check if you specified the correct path")
     print(f"Loading database {args.database} ...")
-    mols = {}
-    if args.database in db_config:
-        try:
-            mols = pickle.load(open(f"{config['local_db']}/{args.database}.vsdb", "rb"))
-        except FileNotFoundError:
-            try:
-                mols = pickle.load(open(f"{config['global_db']}/{args.database}.vsdb", "rb"))
-            except FileNotFoundError:
-                substructure.error(message=f"{args.database} not found. Please make sure you specified the correct shortcut")
-    else:
-        if os.path.exists(args.database):
-            if args.database.endswith(".vsdb"):
-                try:
-                    mols = pickle.load(open(args.database, "rb"))
-                except:
-                    substructure.error(message=f"{args.output} could not be opened. Please make sure the file has the correct "
-                                               f"format")
-
-            else:
-                if args.mpi_np:
-                    mols, failed = read.read_sd_mp(args.database, pool)
-                else:
-                    mols, failed = read.read_db_from_sd(args.database)
-                if failed:
-                    print(f"{len(failed)} of {len(mols) + len(failed)} molecules in {args.database} could not be processed")
-                if not mols:
-                    substructure.error(message="No molecules could be read from SD file. Please make sure it has the right "
-                                               "format")
-        else:
-            substructure.error(message=f"File {args.database} not found. Please make sure you specified the correct path")
-    db_desc = mols.pop("config")
-    ### Read input query
-    print("Reading input molecules ...")
-    if args.smarts:
-        query = read.read_smarts(args.smarts)
-        if not query:
-            substructure.error(message="No valid molecules could be generated from the provided SMARTS.")
-    elif args.smiles:
-        query = read.read_smiles(args.smiles, args.mode, args.ntauts)
-        if not query:
-            substructure.error(message="No valid molecules could be generated from the provided SMILES.")
-    else:
-        if os.path.exists(args.input):
-            query = read.read_file(args.input, args.input_format, args.smiles_column, args.delimiter, args.mode, args.ntauts)
-            if not query:
-                if args.input.endswith(".sdf") or args.input_format == "sdf":
-                    substructure.error(message="No valid molecules could be read from SD file.")
-                elif args.input.endswith(".csv") or args.input_format == "csv":
-                    substructure.error(message="No valid molecules could be read from input file. Please check/specify "
-                                               "name of SMILES/InChI containing column (--mol_column) or check/specify the"
-                                               "separator (--delimiter)")
-                elif args.input.endswith(".xlsx") or args.input_format == "xlsx":
-                    substructure.error(message="No valid molecules could be read from input file. Please check/specify "
-                                               "name of SMILES/InChI containing column (--mol_column))")
-                else:
-                    substructure.error(message="File format not recognized. Please specify the file format (--file_format)")
-        else:
-            query = {}
-            substructure.error(message=f"File {args.input} not found. Please make sure you specified the correct path")
-    ### perform substructure search depending on selected mode and parameters
-    print("Performing substructure search ...")
     sub_time = time.time()
-    results = {}
-    if db_desc[0] == "yes":
-        if args.mode == "std":
-            key = "mol_sta"
-        elif args.mode == "can_taut":
-            key = "mol_can"
-        elif args.mode == "all_tauts":
-            key = "mol_sta"
+    # load database if database path is valid
+    mols = read_database(args)
+    try:
+        db_desc = mols.pop("config")
+    except KeyError:
+        db_desc = None
+    sub_time_2 = time.time()
+    sub_dur = sub_time_2 - sub_time
+    print(sub_dur)
+    print("Reading query input ...")
+    # load input if paths are correct
+    query = read_input(args)
+    # set mol used based on selected mode and database
+    if db_desc:
+        if db_desc[0] == "yes":
+            if args.mode == "std":
+                key = "mol_sta"
+            elif args.mode == "can_taut":
+                key = "mol_can"
+            elif args.mode == "all_tauts":
+                key = "mol_sta"
+            else:
+                key = "mol"
         else:
             key = "mol"
     else:
         key = "mol"
+    results = {}
+    # perform substructure search based on selected parameters
     if args.fullmatch:
-        if args.mpi_np:
+        if args.nproc:
+            pool = mp.Pool(processes=args.nproc)
             if args.mode == "std" or args.mode == "mol_can":
                 sss.sss_fm_mp(query, mols, key, filter_dict, results, pool)
             elif args.mode == "no_std":
                 sss.sss_fm_nost_mp(query, mols, key, filter_dict, results, pool)
             else:
                 sss.sss_fm_taut_mp(query, mols, key, filter_dict, results, pool)
+            pool.close()
         else:
             if args.mode == "std" or args.mode == "mol_can":
                 sss.sss_fm(query, mols, key, filter_dict, results)
@@ -365,11 +340,13 @@ def substruct(args):
             else:
                 sss.sss_fm_taut(query, mols, key, filter_dict, results)
     else:
-        if args.mpi_np:
+        if args.nproc:
+            pool = mp.Pool(processes=args.nproc)
             if args.mode == "std" or args.mode == "can_taut" or args.mode == "no_std":
                 sss.sss_mp(query, mols, key, filter_dict, results, pool)
             else:
                 sss.sss_mp_taut(query, mols, key, filter_dict, results, pool)
+            pool.close()
         else:
             if args.mode == "std" or args.mode == "can_taut" or args.mode == "no_std":
                 sss.sss(query, mols, key, filter_dict, results)
@@ -380,11 +357,11 @@ def substruct(args):
     print(sub_dur)
     print("Finished substructure search")
     del mols
-    ### calculate properties if desired
+    # calculate properties if desired
     if args.properties:
         for i in results:
             calc_props(results[i]["mol"], results[i]["props"])
-    ### write results to output file(s)
+    # write results to output file(s)
     print(f"{len(results)} matches found")
     print("Generating output file(s) ...")
     if args.multfile:
@@ -395,7 +372,7 @@ def substruct(args):
                 write_output.gen_csv_xls_mult(query, results, args.output)
             else:
                 write_output.gen_sdf_mult(query, results, args.output)
-            if args.PDF:
+            if args.pdf:
                 print("Generating PDF file(s) ...")
                 if args.output.endswith(".sdf") or args.output.endswith(".csv") or args.output.endswith(".xlsx") or args.output.endswith(".xls"):
                     out_file = args.output.rsplit(".", maxsplit=1)[0]
@@ -408,7 +385,7 @@ def substruct(args):
                 write_output.gen_csv_xls(results, args.output)
             else:
                 write_output.gen_sdf(results, args.output)
-            if args.PDF:
+            if args.pdf:
                 print("Generating PDF file(s) ...")
                 if args.output.endswith(".sdf") or args.output.endswith(".csv") or args.output.endswith(
                         ".xlsx") or args.output.endswith(".xls"):
@@ -419,8 +396,6 @@ def substruct(args):
     end_time = time.time()
     print(f"Finished: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     duration = round(end_time - start_time, 5)
-    if args.mpi_np:
-        pool.close()
     print(f"Finished in {duration} seconds")
 
 
@@ -440,7 +415,7 @@ fp_sim.add_argument("-d", "--database", help="specify path of the database file 
                                              "for an integrated database", default=db_default, metavar="")
 fp_sim.add_argument("-o", "--output", help="specify name of output file [default: fingerprint.sdf]",
                     default="fingerprint.sdf", metavar="")
-fp_sim.add_argument("-m", "--mode", help="choose a mode for substructure search [std, all_tauts, can_taut, no_std]",
+fp_sim.add_argument("-m", "--mode", help="choose a mode for similarity search [std, all_tauts, can_taut, no_std]",
                     choices=["std", "all_tauts", "can_taut", "no_std"], default="std", metavar="")
 fp_sim.add_argument("-np", "--nproc", type=int, help="Specify the number of processors used when the application is "
                                                       "run in multiprocessing mode.", metavar="")
