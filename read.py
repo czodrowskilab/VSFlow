@@ -401,8 +401,8 @@ def read_db_from_sd(infile):
         mol_block_list = sd_blocks[i][:sd_blocks[i].index("M  END\n") + 1]
         mol_block = ''.join([elem for elem in mol_block_list])
         mol = Chem.MolFromMolBlock(mol_block)
-        name = mol.GetProp("_Name")
         if mol:
+            name = mol.GetProp("_Name")
             tags = sd_blocks[i][sd_blocks[i].index("M  END\n") + 1:]
             props = {}
             if name:
@@ -436,8 +436,8 @@ def read_mol_block(block):
     mol_block_list = block[:block.index("M  END\n") + 1]
     mol_block = ''.join([elem for elem in mol_block_list])
     mol = Chem.MolFromMolBlock(mol_block)
-    name = mol.GetProp("_Name")
     if mol:
+        name = mol.GetProp("_Name")
         tags = block[block.index("M  END\n") + 1:]
         props = {}
         if name:
