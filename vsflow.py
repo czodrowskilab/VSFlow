@@ -429,46 +429,46 @@ substructure.set_defaults(func=substruct)
 
 fp_sim = subparsers.add_parser("fpsim", description="molecular similarity search using fingerprints")
 group_fp = fp_sim.add_mutually_exclusive_group(required=True)
-group_fp.add_argument("-in", "--input", help="input file")
-group_fp.add_argument("-smi", "--smiles", help="specify smiles on command line", action="append")
-group_fp.add_argument("-sma", "--smarts", help="specify smiles on command line", action="append")
-fp_sim.add_argument("-m", "--mode", help="choose a mode for substructure search", choices=["std", "all_tauts",
-                                                                                                 "can_taut", "no_std"],
-                          default="std")
-fp_sim.add_argument("-np", "--mpi_np", type=int,
-                    help="Specifies the number of processors n when the application is run in"
-                         " MPI mode.")
-fp_sim.add_argument("-out", "--output", help="specify name of output file", default="vsflow_fingerprint.sdf")
+group_fp.add_argument("-in", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="")
+group_fp.add_argument("-smi", "--smiles", help="specify SMILES string on command line in double quotes",
+                      action="append", metavar="")
+group_fp.add_argument("-sma", "--smarts", help="specify SMARTS string on command line in double quotes",
+                      action="append", metavar="")
+fp_sim.add_argument("-db", "--database", help="specify the database file [sdf or vsdb] or specify the shortcut for an "
+                                              "integrated database", default=db_default, metavar="")
+fp_sim.add_argument("-out", "--output", help="specify name of output file", default="vsflow_fingerprint.sdf", metavar="")
+fp_sim.add_argument("-m", "--mode", help="choose a mode for substructure search [std, all_tauts, can_taut, no_std]",
+                    choices=["std", "all_tauts", "can_taut", "no_std"], default="std", metavar="")
+fp_sim.add_argument("-np", "--mpi_np", type=int, help="Specify the number of processors used when the application is "
+                                                      "run in multiprocessing mode.", metavar="")
 fp_sim.add_argument("-pdf", "--PDF", help="generate a pdf file for substructure matches", action="store_true")
-fp_sim.add_argument("-db", "--database", help="select database", default=db_default)
-fp_sim.add_argument("-id", "--identity",
-                    help="specify the identity tag for molecules in database, only required if non-implemented database is used")
 fp_sim.add_argument("-props", "--properties",
                     help="specifies if calculated molecular properties are written to the output files",
                     action="store_true")
 fp_sim.add_argument("-mf", "--multfile", help="generate separate output files for every query molecule",
                     action="store_true")
-fp_sim.add_argument("-fi", "--input_format", help="Specify file typ if no file extension is present in input file name")
-fp_sim.add_argument("-col", "--smiles_column", help="Specify name of smiles column in csv file", default="smiles")
-fp_sim.add_argument("-del", "--delimiter", help="Specify delimiter of csv file", default=";")
-fp_sim.add_argument("-head", "--header", help="Specify row of file to be used as column names", type=int, default=1)
+fp_sim.add_argument("-fi", "--input_format", help="Specify the file typ if no file extension is present in input file "
+                                                  "name [sdf, csv, xlsx]", metavar="")
+fp_sim.add_argument("-col", "--smiles_column", help="Specify name of smiles column in csv file", default="smiles", metavar="")
+fp_sim.add_argument("-del", "--delimiter", help="Specify delimiter of csv file", default=";", metavar="")
+fp_sim.add_argument("-head", "--header", help="Specify row of file to be used as column names", type=int, default=1, metavar="")
 fp_sim.add_argument("-fp", "--fingerprint", help="specify fingerprint to be used", choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs"],
-                    default="fcfp")
+                    default="fcfp", metavar="")
 fp_sim.add_argument("-sim", "--similarity", help="specify fingerprint similarity metric to be used",
-                    choices=["tan", "dice", "cos", "sok", "russ", "kulc", "mcco", "tver"], default="tan")
+                    choices=["tan", "dice", "cos", "sok", "russ", "kulc", "mcco", "tver"], default="tan", metavar="")
 fp_sim.add_argument("-fpr", "--radius", help="radius of circular fingerprints ecfp and fcfp", type=int,
-                    default=3)
+                    default=3, metavar="")
 fp_sim.add_argument("-nbits", "--NBITS", help="number of bits used to generate ecfp and fcfp fingerprints", type=int,
-                    default=4096)
+                    default=4096, metavar="")
 fp_sim.add_argument("-top", "--top_hits", type=int, default=10,
-                    help="Maximum number of molecules with highest similarity to keep. [Default = 10]")
+                    help="Maximum number of molecules with highest similarity to keep. [Default = 10]", metavar="")
 fp_sim.add_argument("-map", "--simmap", help="generates similarity maps for fingerprints in pdf file", action="store_true")
-fp_sim.add_argument("-cut", "--cutoff", help="specify cutoff value for similarity coefficient", type=float)
-fp_sim.add_argument("-filt", "--filter", help="specify property to filter screening results", action="append")
-fp_sim.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated", type=int, default=100)
+fp_sim.add_argument("-cut", "--cutoff", help="specify cutoff value for similarity coefficient", type=float, metavar="")
+fp_sim.add_argument("-filt", "--filter", help="specify property to filter screening results", action="append", metavar="")
+fp_sim.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated", type=int, default=100, metavar="")
 fp_sim.add_argument("-c", "--chiral", help="specify if chirality should be considered", action="store_true")
-fp_sim.add_argument("-tva", "--tver_alpha", help="specify alpha parameter for Tversky similarity", default=0.5, type=float)
-fp_sim.add_argument("-tvb", "--tver_beta", help="specify beta parameter for Tversky similarity", default=0.5, type=float)
+fp_sim.add_argument("-tva", "--tver_alpha", help="specify alpha parameter for Tversky similarity", default=0.5, type=float, metavar="")
+fp_sim.add_argument("--tver_beta", help="specify beta parameter for Tversky similarity", default=0.5, type=float, metavar="")
 
 
 def fingerprint(args):
@@ -634,6 +634,10 @@ def fingerprint(args):
                     out_file = f"{args.output}.pdf"
                 if args.simmap:
                     if args.fingerprint == "MACCS":
+                        print("For MACCS keys no similarity map can be computed")
+                        visualize.gen_pdf(query, results, out_file, ttf_path)
+                    elif args.similarity == "tver":
+                        print("For Tversky Similarity no similarity map can be computed")
                         visualize.gen_pdf(query, results, out_file, ttf_path)
                     else:
                         print(f"Calculating similarity maps for {len(results)} matches ...")
