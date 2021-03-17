@@ -467,6 +467,8 @@ fp_sim.add_argument("-cut", "--cutoff", help="specify cutoff value for similarit
 fp_sim.add_argument("-filt", "--filter", help="specify property to filter screening results", action="append")
 fp_sim.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated", type=int, default=100)
 fp_sim.add_argument("-c", "--chiral", help="specify if chirality should be considered", action="store_true")
+fp_sim.add_argument("-tva", "--tver_alpha", help="specify alpha parameter for Tversky similarity", default=0.5, type=float)
+fp_sim.add_argument("-tvb", "--tver_beta", help="specify beta parameter for Tversky similarity", default=0.5, type=float)
 
 
 def fingerprint(args):
@@ -576,9 +578,18 @@ def fingerprint(args):
             fpsearch.fp_maccs(query, "mol")
     print("Calculating similarities ...")
     if args.cutoff:
-        results = fpsearch.sim(mols, query, key, args.cutoff, args.similarity, filter_dict, name)
+        if args.similarity == "tver":
+            results = fpsearch.sim_tver(mols, query, key, args.cutoff, args.similarity, filter_dict, name,
+                                        args.tver_alpha, args.tver_beta)
+        else:
+            results = fpsearch.sim(mols, query, key, args.cutoff, args.similarity, filter_dict, name)
     else:
-        results = fpsearch.sim_top(mols, query, key, args.top_hits, args.similarity, filter_dict, name)
+        if args.similarity == "tver":
+            results = fpsearch.sim_top_tver(mols, query, key, args.top_hits, args.similarity, filter_dict, name,
+                                            args.tver_alpha, args.tver_beta)
+            print(len(results))
+        else:
+            results = fpsearch.sim_top(mols, query, key, args.top_hits, args.similarity, filter_dict, name)
     sub_time_2 = time.time()
     sub_dur = sub_time_2 - sub_time
     print(sub_dur)
