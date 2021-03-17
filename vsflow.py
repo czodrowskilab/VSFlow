@@ -193,7 +193,7 @@ def calc_props(mol, props):
     props["HetAromRings"] = str(Descriptors.NumAromaticHeterocycles(mol))
 
 
-def read_database(args, pool):
+def read_database(args):
     mols = {}
     if args.database in db_config:
         try:
@@ -202,7 +202,7 @@ def read_database(args, pool):
             try:
                 mols = pickle.load(open(f"{config['global_db']}/{args.database}.vsdb", "rb"))
             except FileNotFoundError:
-                substructure.error(
+                parser.error(
                     message=f"{args.database} not found. Please make sure you specified the correct shortcut")
     else:
         if os.path.exists(args.database):
@@ -210,21 +210,23 @@ def read_database(args, pool):
                 try:
                     mols = pickle.load(open(args.database, "rb"))
                 except:
-                    substructure.error(message=f"{args.output} could not be opened. Please make sure the file has the correct "
+                    parser.error(message=f"{args.output} could not be opened. Please make sure the file has the correct "
                                                f"format")
 
             else:
                 if args.mpi_np:
+                    pool = mp.Pool(processes=args.nproc)
                     mols, failed = read.read_sd_mp(args.database, pool)
+                    pool.close()
                 else:
                     mols, failed = read.read_db_from_sd(args.database)
                 if failed:
                     print(f"{len(failed)} of {len(mols) + len(failed)} molecules in {args.database} could not be processed")
                 if not mols:
-                    substructure.error(message="No molecules could be read from SD file. Please make sure it has the right "
+                    parser.error(message="No molecules could be read from SD file. Please make sure it has the right "
                                                "format")
         else:
-            substructure.error(message=f"File {args.database} not found. Please make sure you specified the correct path")
+            parser.error(message=f"File {args.database} not found. Please make sure you specified the correct path")
     return mols
 
 
@@ -232,29 +234,29 @@ def read_input(args):
     if args.smarts:
         query = read.read_smarts(args.smarts)
         if not query:
-            substructure.error(message="No valid molecule(s) could be generated from the provided SMARTS.")
+            parser.error(message="No valid molecule(s) could be generated from the provided SMARTS.")
     elif args.smiles:
         query = read.read_smiles(args.smiles, args.mode, args.ntauts)
         if not query:
-            substructure.error(message="No valid molecule(s) could be generated from the provided SMILES.")
+            parser.error(message="No valid molecule(s) could be generated from the provided SMILES.")
     else:
         if os.path.exists(args.input):
             query = read.read_file(args.input, args.input_format, args.smiles_column, args.delimiter, args.mode, args.ntauts)
             if not query:
                 if args.input.endswith(".sdf") or args.input_format == "sdf":
-                    substructure.error(message="No valid molecules could be read from SD file.")
+                    parser.error(message="No valid molecules could be read from SD file.")
                 elif args.input.endswith(".csv") or args.input_format == "csv":
-                    substructure.error(message="No valid molecules could be read from input file. Please check/specify "
+                    parser.error(message="No valid molecules could be read from input file. Please check/specify "
                                                "name of SMILES/InChI containing column (--mol_column) or check/specify the"
                                                "separator (--delimiter)")
                 elif args.input.endswith(".xlsx") or args.input_format == "xlsx":
-                    substructure.error(message="No valid molecules could be read from input file. Please check/specify "
+                    parser.error(message="No valid molecules could be read from input file. Please check/specify "
                                                "name of SMILES/InChI containing column (--mol_column))")
                 else:
-                    substructure.error(message="File format not recognized. Please specify the file format (--file_format)")
+                    parser.error(message="File format not recognized. Please specify the file format (--file_format)")
         else:
             query = {}
-            substructure.error(message=f"File {args.input} not found. Please make sure you specified the correct path")
+            parser.error(message=f"File {args.input} not found. Please make sure you specified the correct path")
     return query
 
 
@@ -429,142 +431,185 @@ substructure.set_defaults(func=substruct)
 
 fp_sim = subparsers.add_parser("fpsim", description="molecular similarity search using fingerprints")
 group_fp = fp_sim.add_mutually_exclusive_group(required=True)
-group_fp.add_argument("-in", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="")
+group_fp.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="")
 group_fp.add_argument("-smi", "--smiles", help="specify SMILES string on command line in double quotes",
                       action="append", metavar="")
 group_fp.add_argument("-sma", "--smarts", help="specify SMARTS string on command line in double quotes",
                       action="append", metavar="")
-fp_sim.add_argument("-db", "--database", help="specify the database file [sdf or vsdb] or specify the shortcut for an "
-                                              "integrated database", default=db_default, metavar="")
-fp_sim.add_argument("-out", "--output", help="specify name of output file", default="vsflow_fingerprint.sdf", metavar="")
+fp_sim.add_argument("-d", "--database", help="specify path of the database file [sdf or vsdb] or specify the shortcut "
+                                             "for an integrated database", default=db_default, metavar="")
+fp_sim.add_argument("-o", "--output", help="specify name of output file [default: fingerprint.sdf]",
+                    default="fingerprint.sdf", metavar="")
 fp_sim.add_argument("-m", "--mode", help="choose a mode for substructure search [std, all_tauts, can_taut, no_std]",
                     choices=["std", "all_tauts", "can_taut", "no_std"], default="std", metavar="")
-fp_sim.add_argument("-np", "--mpi_np", type=int, help="Specify the number of processors used when the application is "
+fp_sim.add_argument("-np", "--nproc", type=int, help="Specify the number of processors used when the application is "
                                                       "run in multiprocessing mode.", metavar="")
-fp_sim.add_argument("-pdf", "--PDF", help="generate a pdf file for substructure matches", action="store_true")
-fp_sim.add_argument("-props", "--properties",
-                    help="specifies if calculated molecular properties are written to the output files",
-                    action="store_true")
+fp_sim.add_argument("-f", "--fingerprint", help="specify fingerprint to be used [rdkit, ecfp, fcfp, ap, tt, maccs]",
+                    choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs"], default="fcfp", metavar="")
+fp_sim.add_argument("-r", "--radius", help="specify radius of circular fingerprints ecfp and fcfp [default: 3]",
+                    type=int, default=3, metavar="")
+fp_sim.add_argument("-nb", "--nbits", help="specify bit size of fingerprints [default: 4096]", type=int,
+                    default=4096, metavar="")
+fp_sim.add_argument("-s", "--similarity", help="specify fingerprint similarity metric to be used [tan, dice, cos, sok, "
+                                               "russ, kulc, mcco, tver]",
+                    choices=["tan", "dice", "cos", "sok", "russ", "kulc", "mcco", "tver"], default="tan", metavar="")
+fp_sim.add_argument("-t", "--top_hits", type=int, default=10,
+                    help="Maximum number of molecules with highest similarity to keep [default: 10]", metavar="")
+fp_sim.add_argument("-c", "--cutoff", help="specify cutoff value for similarity coefficient", type=float, metavar="")
+fp_sim.add_argument("-nt", "--ntauts", help="maximum number of query tautomers to be enumerated in mode all_tauts "
+                                     "[default: 100]", type=int, default=100, metavar="")
 fp_sim.add_argument("-mf", "--multfile", help="generate separate output files for every query molecule",
                     action="store_true")
-fp_sim.add_argument("-fi", "--input_format", help="Specify the file typ if no file extension is present in input file "
-                                                  "name [sdf, csv, xlsx]", metavar="")
-fp_sim.add_argument("-col", "--smiles_column", help="Specify name of smiles column in csv file", default="smiles", metavar="")
-fp_sim.add_argument("-del", "--delimiter", help="Specify delimiter of csv file", default=";", metavar="")
-fp_sim.add_argument("-head", "--header", help="Specify row of file to be used as column names", type=int, default=1, metavar="")
-fp_sim.add_argument("-fp", "--fingerprint", help="specify fingerprint to be used", choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs"],
-                    default="fcfp", metavar="")
-fp_sim.add_argument("-sim", "--similarity", help="specify fingerprint similarity metric to be used",
-                    choices=["tan", "dice", "cos", "sok", "russ", "kulc", "mcco", "tver"], default="tan", metavar="")
-fp_sim.add_argument("-fpr", "--radius", help="radius of circular fingerprints ecfp and fcfp", type=int,
-                    default=3, metavar="")
-fp_sim.add_argument("-nbits", "--NBITS", help="number of bits used to generate ecfp and fcfp fingerprints", type=int,
-                    default=4096, metavar="")
-fp_sim.add_argument("-top", "--top_hits", type=int, default=10,
-                    help="Maximum number of molecules with highest similarity to keep. [Default = 10]", metavar="")
-fp_sim.add_argument("-map", "--simmap", help="generates similarity maps for fingerprints in pdf file", action="store_true")
-fp_sim.add_argument("-cut", "--cutoff", help="specify cutoff value for similarity coefficient", type=float, metavar="")
-fp_sim.add_argument("-filt", "--filter", help="specify property to filter screening results", action="append", metavar="")
-fp_sim.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated", type=int, default=100, metavar="")
-fp_sim.add_argument("-c", "--chiral", help="specify if chirality should be considered", action="store_true")
-fp_sim.add_argument("-tva", "--tver_alpha", help="specify alpha parameter for Tversky similarity", default=0.5, type=float, metavar="")
-fp_sim.add_argument("--tver_beta", help="specify beta parameter for Tversky similarity", default=0.5, type=float, metavar="")
+fp_sim.add_argument("-p", "--properties",
+                    help="if specified, calculated molecular properties are written to the output files",
+                    action="store_true")
+fp_sim.add_argument("--filter", help="specify property to filter screening results", action="append", metavar="")
+fp_sim.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
+                                         "not automatically recognized", metavar="")
+fp_sim.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
+fp_sim.add_argument("--header", help="Specify number of row in csv/xlsx file to be used as column names "
+                                     "[default: 1, e.g. first row]", type=int, default=1, metavar="")
+fp_sim.add_argument("--pdf", help="generate a pdf file for all results", action="store_true")
+fp_sim.add_argument("--simmap", help="generates similarity maps for supported fingerprints in pdf file",
+                    action="store_true")
+fp_sim.add_argument("--no_chiral", help="specify if chirality should not be considered", action="store_false")
+fp_sim.add_argument("--tver_alpha", help="specify alpha parameter (weighs database molecule) for Tversky similarity "
+                                         "[default: 0.5]", default=0.5, type=float, metavar="")
+fp_sim.add_argument("--tver_beta", help="specify beta parameter (weighs query molecule) for Tversky similarity "
+                                        "[default: 0.5]", default=0.5, type=float, metavar="")
 
 
 def fingerprint(args):
     start_time = time.time()
     print(f"Start: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    # check args.nproc
+    if args.nproc:
+        if 1 < args.nproc < mp.cpu_count():
+            print(f"Running in parallel mode on {args.nproc} threads")
+            pass
+        elif args.nproc <= 1:
+            print("Running in single core mode")
+            args.nproc = None
+        else:
+            args.nproc = mp.cpu_count()
+            print(f"Running in parallel mode on {args.nproc} threads")
+    else:
+        print("Running in single core mode")
+    # check if filter is set correct
     if args.filter:
         filter_dict = check_filter(args.filter)
     else:
         filter_dict = {}
-    pool = mp.Pool(processes=args.mpi_np)
+    # check if output path is valid
+    if "/" in args.output:
+        out_path = args.output.rsplit("/", maxsplit=1)[0]
+        if not os.path.exists(out_path):
+            parser.error(message=f"{args.output} is no valid path. Please check if you specified the correct path")
     print(f"Loading database {args.database} ...")
     sub_time = time.time()
-    mols = read_database(args, pool)
-    db_desc = mols.pop("config")
+    # load database if database path is valid
+    mols = read_database(args)
+    try:
+        db_desc = mols.pop("config")
+    except KeyError:
+        db_desc = None
     sub_time_2 = time.time()
     sub_dur = sub_time_2 - sub_time
     print(sub_dur)
     print("Reading query input ...")
+    # load input if paths are correct
     query = read_input(args)
-    if db_desc[0] == "yes":
-        if args.mode == "std":
-            key = "mol_sta"
-        elif args.mode == "can_taut":
-            key = "mol_can"
-        elif args.mode == "all_tauts":
-            key = "mol_sta"
+    # set mol used based on selected parameters and database
+    if db_desc:
+        if db_desc[0] == "yes":
+            if args.mode == "std":
+                key = "mol_sta"
+            elif args.mode == "can_taut":
+                key = "mol_can"
+            elif args.mode == "all_tauts":
+                key = "mol_sta"
+            else:
+                key = "mol"
         else:
             key = "mol"
     else:
         key = "mol"
+    # Calculate fingerprints
     print("Calculating fingerprints ...")
     sub_time = time.time()
     features = False
     if args.fingerprint == "fcfp" or args.fingerprint == "ecfp":
         if args.fingerprint == "fcfp":
-            name = f"FCFP{args.radius * 2}-like Morgan {args.NBITS} bits"
+            name = f"FCFP{args.radius * 2}-like Morgan {args.nbits} bits"
             features = True
         else:
-            name = f"ECFP{args.radius * 2}-like Morgan {args.NBITS} bits"
-        if args.mpi_np:
-            argslist = [(mols[i][key], i, args.radius, features, args.chiral, args.NBITS) for i in mols]
+            name = f"ECFP{args.radius * 2}-like Morgan {args.nbits} bits"
+        if args.nproc:
+            pool = mp.Pool(processes=args.nproc)
+            argslist = [(mols[i][key], i, args.radius, features, args.no_chiral, args.nbits) for i in mols]
             fps = pool.starmap(fpsearch.fp_morgan_mp, argslist)
             fpsearch.set_fp_mp(fps, mols)
-            argslist = [(query[j]["mol"], j, args.radius, features, args.chiral, args.NBITS) for j in query]
+            argslist = [(query[j]["mol"], j, args.radius, features, args.no_chiral, args.nbits) for j in query]
             fps = pool.starmap(fpsearch.fp_morgan_mp, argslist)
             fpsearch.set_fp_mp(fps, query)
             del argslist
             del fps
+            pool.close()
         else:
-            fpsearch.fp_morgan(mols, key, args.radius, args.NBITS, features, args.chiral)
-            fpsearch.fp_morgan(query, "mol", args.radius, args.NBITS, features, args.chiral)
+            fpsearch.fp_morgan(mols, key, args.radius, args.nbits, features, args.no_chiral)
+            fpsearch.fp_morgan(query, "mol", args.radius, args.nbits, features, args.no_chiral)
     elif args.fingerprint == "rdkit":
-        name = f"RDKit {args.NBITS} bits"
-        if args.mpi_np:
-            argslist = [(mols[i][key], i, args.NBITS) for i in mols]
+        name = f"RDKit {args.nbits} bits"
+        if args.nproc:
+            pool = mp.Pool(processes=args.nproc)
+            argslist = [(mols[i][key], i, args.nbits) for i in mols]
             fps = pool.starmap(fpsearch.fp_rdkit_mp, argslist)
             fpsearch.set_fp_mp(fps, mols)
-            argslist = [(query[j]["mol"], j, args.NBITS) for j in query]
+            argslist = [(query[j]["mol"], j, args.nbits) for j in query]
             fps = pool.starmap(fpsearch.fp_rdkit_mp, argslist)
             fpsearch.set_fp_mp(fps, query)
             del argslist
             del fps
+            pool.close()
         else:
-            fpsearch.fp_rdkit(mols, key, args.NBITS)
-            fpsearch.fp_rdkit(query, "mol", args.NBITS)
+            fpsearch.fp_rdkit(mols, key, args.nbits)
+            fpsearch.fp_rdkit(query, "mol", args.nbits)
     elif args.fingerprint == "ap":
-        name = f"AtomPairs {args.NBITS} bits"
-        if args.mpi_np:
-            argslist = [(mols[i][key], i, args.NBITS, args.chiral) for i in mols]
+        name = f"AtomPairs {args.nbits} bits"
+        if args.nproc:
+            pool = mp.Pool(processes=args.nproc)
+            argslist = [(mols[i][key], i, args.nbits, args.no_chiral) for i in mols]
             fps = pool.starmap(fpsearch.fp_atompairs_mp, argslist)
             fpsearch.set_fp_mp(fps, mols)
-            argslist = [(query[j]["mol"], j, args.NBITS, args.chiral) for j in query]
+            argslist = [(query[j]["mol"], j, args.nbits, args.no_chiral) for j in query]
             fps = pool.starmap(fpsearch.fp_atompairs_mp, argslist)
             fpsearch.set_fp_mp(fps, query)
             del argslist
             del fps
+            pool.close()
         else:
-            fpsearch.fp_atompairs(mols, key, args.NBITS, args.chiral)
-            fpsearch.fp_atompairs(query, "mol", args.NBITS, args.chiral)
+            fpsearch.fp_atompairs(mols, key, args.nbits, args.no_chiral)
+            fpsearch.fp_atompairs(query, "mol", args.nbits, args.no_chiral)
     elif args.fingerprint == "tt":
-        name = f"TopologicalTorsion {args.NBITS} bits"
-        if args.mpi_np:
-            argslist = [(mols[i][key], i, args.NBITS, args.chiral) for i in mols]
+        name = f"TopologicalTorsion {args.nbits} bits"
+        if args.nproc:
+            pool = mp.Pool(processes=args.nproc)
+            argslist = [(mols[i][key], i, args.nbits, args.no_chiral) for i in mols]
             fps = pool.starmap(fpsearch.fp_torsion_mp, argslist)
             fpsearch.set_fp_mp(fps, mols)
-            argslist = [(query[j]["mol"], j, args.NBITS, args.chiral) for j in query]
+            argslist = [(query[j]["mol"], j, args.nbits, args.no_chiral) for j in query]
             fps = pool.starmap(fpsearch.fp_torsion_mp, argslist)
             fpsearch.set_fp_mp(fps, query)
             del argslist
             del fps
+            pool.close()
         else:
-            fpsearch.fp_torsion(mols, key, args.NBITS, args.chiral)
-            fpsearch.fp_torsion(query, "mol", args.NBITS, args.chiral)
+            fpsearch.fp_torsion(mols, key, args.nbits, args.no_chiral)
+            fpsearch.fp_torsion(query, "mol", args.nbits, args.no_chiral)
     else:
         name = "MACCS"
-        if args.mpi_np:
+        if args.nproc:
+            pool = mp.Pool(processes=args.nproc)
             argslist = [(mols[i][key], i) for i in mols]
             fps = pool.starmap(fpsearch.fp_maccs_mp, argslist)
             fpsearch.set_fp_mp(fps, mols)
@@ -573,9 +618,11 @@ def fingerprint(args):
             fpsearch.set_fp_mp(fps, query)
             del argslist
             del fps
+            pool.close()
         else:
             fpsearch.fp_maccs(mols, key)
             fpsearch.fp_maccs(query, "mol")
+    # Calculate similarities
     print("Calculating similarities ...")
     if args.cutoff:
         if args.similarity == "tver":
@@ -595,9 +642,11 @@ def fingerprint(args):
     print(sub_dur)
     del mols
     print(f"{len(results)} matches found")
+    # calculate molecular properties
     if args.properties:
         for i in results:
             calc_props(results[i]["mol"], results[i]["props"])
+    # write output files
     print("Generating output file(s) ...")
     if args.multfile:
         if results:
@@ -607,15 +656,16 @@ def fingerprint(args):
                 write_output.gen_csv_xls_mult(query, results, args.output)
             else:
                 write_output.gen_sdf_mult(query, results, args.output)
-            if args.PDF:
+            if args.pdf:
                 print("Generating PDF file ...")
-                if args.output.endswith(".sdf") or args.output.endswith(".csv") or args.output.endswith(".xlsx") or args.output.endswith(".xls"):
+                if args.output.endswith(".sdf") or args.output.endswith(".csv") or args.output.endswith(".xlsx") or \
+                   args.output.endswith(".xls"):
                     out_file = args.output.rsplit(".", maxsplit=1)[0]
                 else:
                     out_file = args.output
                 if args.simmap:
                     print(f"Calculating similarity maps for {len(results)} matches ...")
-                    visualize.fp_maps(results, query, args.fingerprint, args.radius, args.NBITS, features,
+                    visualize.fp_maps(results, query, args.fingerprint, args.radius, args.nbits, features,
                                       args.similarity, out_file, ttf_path, args.multfile)
                 else:
                     visualize.gen_pdf_mf(query, results, out_file, ttf_path)
@@ -625,7 +675,7 @@ def fingerprint(args):
                 write_output.gen_csv_xls(results, args.output)
             else:
                 write_output.gen_sdf(results, args.output)
-            if args.PDF:
+            if args.pdf:
                 print("Generating PDF file(s) ...")
                 if args.output.endswith(".sdf") or args.output.endswith(".csv") or args.output.endswith(
                         ".xlsx") or args.output.endswith(".xls"):
@@ -641,16 +691,14 @@ def fingerprint(args):
                         visualize.gen_pdf(query, results, out_file, ttf_path)
                     else:
                         print(f"Calculating similarity maps for {len(results)} matches ...")
-                        visualize.fp_maps(results, query, args.fingerprint, args.radius, args.NBITS, features, args.similarity, out_file, ttf_path, args.multfile)
+                        visualize.fp_maps(results, query, args.fingerprint, args.radius, args.nbits, features,
+                                          args.similarity, out_file, ttf_path, args.multfile)
                 else:
                     visualize.gen_pdf(query, results, out_file, ttf_path)
     end_time = time.time()
     print(f"Finished: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     duration = round(end_time - start_time, 5)
-
     print(f"Finished in {duration} seconds")
-
-    pool.close()
 
 
 fp_sim.set_defaults(func=fingerprint)
