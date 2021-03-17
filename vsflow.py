@@ -38,6 +38,7 @@ import sss
 import read
 import write_output
 import fpsearch
+import  shapesearch
 from rdkit.Chem.Draw import rdMolDraw2D
 
 
@@ -649,54 +650,9 @@ shape_sim.add_argument("-db", "--database", default=db_default)
 shape_sim.add_argument("-np", "--mpi_np", type=int)
 shape_sim.add_argument("-py", "--pymol", action="store_true")
 shape_sim.add_argument("-top", "--top_hits", default=10, type=int)
+shape_sim.add_argument("-am", "--align_method", choices=["mmff", "crippen"], default="mmff")
+shape_sim.add_argument("-pdf", "--PDF", action="store_true")
 
-
-def shape_from_smiles(mol, i, num_confs, seed):
-    factory = Gobbi_Pharm2D.factory
-    mol_H = Chem.AddHs(mol)
-    Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, randomSeed=seed, ETversion=2, numThreads=0)
-    try:
-        Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0)
-    except:
-        pass
-    mol_3D = Chem.RemoveHs(mol_H)
-    # query[i]["confs"] = mol_3D
-    # query[i]["param"] = Chem.MMFFGetMoleculeProperties(mol_3D)
-    # mol_params = Chem.MMFFGetMoleculeProperties(mol_3D)
-    # print(type(mol_params))
-    fp_mol = Generate.Gen2DFingerprint(mol_3D, factory, dMat=Chem.Get3DDistanceMatrix(mol_3D, confId=0))
-    return (i, mol_3D, fp_mol)#mol_params)#, fp_mol
-
-
-def algn_mols(db_mol, i, query_mol, query_fp, j):
-    factory = Gobbi_Pharm2D.factory
-    algns = rdMolAlign.GetO3AForProbeConfs(db_mol, query_mol,
-                                           prbPyMMFFMolProperties=Chem.MMFFGetMoleculeProperties(db_mol),
-                                           refPyMMFFMolProperties=Chem.MMFFGetMoleculeProperties(query_mol), refCid=0, numThreads=0)
-    shape_simis = []
-    pharm_simis = []
-    for k in range(len(algns)):
-        algns[k].Align()
-        shape_simis.append((1 - Chem.ShapeTanimotoDist(db_mol, query_mol, confId1=k, confId2=0), k))
-        fp_db = Generate.Gen2DFingerprint(db_mol, factory,
-                                          dMat=Chem.Get3DDistanceMatrix(db_mol, confId=k))
-        pharm_simis.append((DataStructs.TanimotoSimilarity(query_fp, fp_db), k))
-    max_shape_simis = max(shape_simis)[0]
-    max_pharm_simis = max(pharm_simis)[0]
-    combo = max(shape_simis)[0] + max(pharm_simis)[0]
-    return (combo, max_shape_simis, max_pharm_simis, j, i, max(shape_simis)[1])
-
-
-def export_pymol(file1, file2):
-    #py_object1 = file1.rsplit(".sdf", maxsplit=1)[0]
-    py_object2 = file2.rsplit(".sdf", maxsplit=1)[0]
-    pref = py_object2.split("/")[-1]
-    #print(py_object2)
-    cmd.load(filename=file1)
-    cmd.load(filename=file2)
-    cmd.split_states(object=pref)
-    cmd.delete(pref)
-    cmd.save(f"{py_object2}.pse")
 
 
 def shape(args):
@@ -723,13 +679,6 @@ def shape(args):
                                      " shape similarity screening.")
         else:
             parser.error(message=f"{args.database} could not be opened. Please make sure you specified the correct path")
-    # for i in mols:
-    #     try:
-    #         test_confs = mols[i]["confs"]
-    #     except KeyError:
-    #         parser.error(message=f"Database {args.database} does not contain conformers. Use mode preparedb to generate "
-    #                              f"conformers and prepare a database for shape similarity screening")
-    #     break
 
     db_desc = mols.pop("config")
     if db_desc[1] == 0:
@@ -739,63 +688,31 @@ def shape(args):
     num_confs = db_desc[1]
 
     if args.smiles:
-        query = read.read_smiles_shape(args.smiles)
+
+        query = read.read_smiles_std(args.smiles)
+    else:
+        query = read.read_sd_3d(args.input)
+
+        print(query)
+    # perform shape screening with specified parameters
     if args.mpi_np:
         pool_shape = mp.Pool(processes=args.mpi_np)
-        query_confs = pool_shape.starmap(shape_from_smiles, [(query[i]["mol"], i, num_confs, seed) for i in query])
+        query_confs = pool_shape.starmap(shapesearch.gen_query_conf_mp, [(query[i]["mol"], i, num_confs, seed) for i in query])
         print(query_confs)
         for entry in query_confs:
             query[entry[0]]["confs"] = entry[1]
             query[entry[0]]["fp_shape"] = entry[2]
+        del query_confs
         print(query)
-        aligns = pool_shape.starmap(algn_mols, [(mols[i]["confs"], i, query[j]["confs"], query[j]["fp_shape"], j)
+        aligns = pool_shape.starmap(shapesearch.shape_pfp_tani_mp, [(mols[i]["confs"], i, query[j]["confs"], query[j]["fp_shape"], j)
                                                 for i in mols for j in query])
         print(aligns)
         print(max(aligns))
         aligns = sorted(aligns, reverse=True)
-        #top_hits = sorted(aligns, reverse=True)[:10]
-
-
         pool_shape.close()
-
     else:
-        factory = Gobbi_Pharm2D.factory
-        score = []
-        for i in query:
-            mol_H = Chem.AddHs(query[i]["mol"])
-            Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, randomSeed=seed, ETversion=2, numThreads=0)
-            try:
-                Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0)
-            except:
-                pass
-            mol_3D = Chem.RemoveHs(mol_H)
-            #query[i]["confs"] = mol_3D
-            #query[i]["param"] = Chem.MMFFGetMoleculeProperties(mol_3D)
-            mol_params = Chem.MMFFGetMoleculeProperties(mol_3D)
-            fp_mol = Generate.Gen2DFingerprint(mol_3D, factory, dMat=Chem.Get3DDistanceMatrix(mol_3D, confId=0))
-            counter = 0
-            for j in mols:
-                algns = rdMolAlign.GetO3AForProbeConfs(mols[j]["confs"], mol_3D,
-                                               prbPyMMFFMolProperties=Chem.MMFFGetMoleculeProperties(mols[j]["confs"]),
-                                               refPyMMFFMolProperties=mol_params, refCid=0, numThreads=0)
-                shape_simis = []
-                pharm_simis = []
-                for k in range(len(algns)):
-                    algns[k].Align()
-                    shape_simis.append((1 - Chem.ShapeTanimotoDist(mols[j]["confs"], mol_3D, confId1=k, confId2=0), k))
-                    fp_db = Generate.Gen2DFingerprint(mols[j]["confs"], factory, dMat=Chem.Get3DDistanceMatrix(mols[j]["confs"], confId=k))
-                    pharm_simis.append((DataStructs.TanimotoSimilarity(fp_mol, fp_db), k))
-                max_shape_simis = max(shape_simis)[0]
-                max_pharm_simis = max(pharm_simis)[0]
-                combo = max(shape_simis)[0] + max(pharm_simis)[0]
-                score.append((combo, max_shape_simis, max_pharm_simis, j, i, max(shape_simis)[1]))
-                print(counter)
-                counter += 1
-        print(max(score))
-        aligns = sorted(score, reverse=True)
-        # top_hits = sorted(aligns, reverse=True)[:10]
-        # grouped = [res[:10] for res in (list(group) for k, group in groupby(aligns, lambda x: x[3]))]
-
+        shapesearch.gen_query_conf_pfp(query, num_confs, seed)
+        aligns = shapesearch.shape_pfp_tani(mols, query)
     # prepare and write results to output files
     grouped = [res[:args.top_hits] for res in (list(group) for k, group in groupby(aligns, lambda x: x[3]))]
     results = {}
@@ -806,7 +723,9 @@ def shape(args):
             mols[feat[4]]["props"]["Shape_Similarity"] = feat[1]
             mols[feat[4]]["props"]["3D_FP_Similarity"] = feat[2]
             mols[feat[4]]["props"]["QuerySmiles"] = query[feat[3]]["pattern"]
-            results[counter] = {"mol": mols[feat[4]]["confs"], "props": mols[feat[4]]["props"], "top_conf": feat[5],
+            # results[counter] = {"mol": mols[feat[4]]["confs"], "props": mols[feat[4]]["props"], "top_conf": feat[5],
+            #                     "q_num": feat[3]}
+            results[counter] = {"mol": feat[6], "props": mols[feat[4]]["props"], "top_conf": feat[5],
                                 "q_num": feat[3]}
             counter += 1
     print(results)
@@ -823,16 +742,9 @@ def shape(args):
         for j in query:
             #print(f"{out_file}_{j + 1}".split("/")[])
             #pref = f"{out_file}_{j + 1}_query".split("/")[-1]
-            export_pymol(f"{out_file}_{j + 1}_query.sdf", f"{out_file}_{j + 1}.sdf")
-
-
-
-
-
-
-
-
-
+            write_output.export_pymol(f"{out_file}_{j + 1}_query.sdf", f"{out_file}_{j + 1}.sdf")
+    if args.PDF:
+        visualize.gen_pdf_shape(query, results, out_file, ttf_path)
 
 
 
@@ -844,18 +756,20 @@ shape_sim.set_defaults(func=shape)
 
 canon = subparsers.add_parser("preparedb")
 # canon_group = canon.add_mutually_exclusive_group()
-canon_group_2 = canon.add_mutually_exclusive_group(required=True)
+canon_group = canon.add_mutually_exclusive_group(required=True)
 canon.add_argument("-in", "--input", required=True)
 canon.add_argument("-np", "--mpi", type=int)
-canon_group_2.add_argument("-out", "--output")
-canon_group_2.add_argument("-int", "--integrate", help="specify shortcut for database")
+canon_group.add_argument("-out", "--output")
+canon_group.add_argument("-int", "--integrate", help="specify shortcut for database")
 canon.add_argument("-intg", "--int_global", help="Stores database by default within the folder of the script", action="store_true")
 canon.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated during standardization process", type=int, default=100)
 canon.add_argument("-st", "--standardize", help="standardizes molecules, removes salts and associated charges", action="store_true")
 canon.add_argument("-c", "--conformers", help="generates multiple 3D conformers, required for mode shape", action="store_true")
 canon.add_argument("-nc", "--nconfs", help="number of conformers generated", type=int, default=20)
+canon.add_argument("-t", "--threshold", help="Retain only the conformations out of nconfs that are at least "
+                                             "this far apart from each other (RMSD calculated on heavy atoms)", type=float)
 # canon_group.add_argument("-can", "--canonicalize", help="standardizes molecules, removes salts and associated charges and canonicalizes tautomers", action="store_true")
-# canon_group.add_argument("-ats", "--all_tauts", help="generate all possible tautomers for molecule up to a maximum specified in --ntauts", action="store_true")
+#canon_group.add_argument("-ats", "--all_tauts", help="generate all possible tautomers for molecule up to a maximum specified in --ntauts", action="store_true")
 
 
 
@@ -865,52 +779,48 @@ def do_standard(mol, dict, ntauts):
     try:
         mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
         mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol_sta)
-        mol_dict["mol_sta"] = mol_sta
-        mol_dict["mol_can"] = mol_can
+        # mol_dict["mol_sta"] = mol_sta
+        # mol_dict["mol_can"] = mol_can
+        # mol_dict["props"] = dict
+        # mol_dict["mol"] = mol
+        mol_dict["mol_sta"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol_sta))
+        mol_dict["mol_can"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol_can))
         mol_dict["props"] = dict
-        mol_dict["mol"] = mol
+        mol_dict["mol"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
         # return (mol_can, dict)
         return mol_dict
     except:
         # return (mol, dict)
-        mol_dict["mol_sta"] = mol
-        mol_dict["mol_can"] = mol
+        mol_dict["mol_sta"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
+        mol_dict["mol_can"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
         mol_dict["props"] = dict
-        mol_dict["mol"] = mol
+        mol_dict["mol"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
+        # mol_dict["mol_sta"] = mol
+        # mol_dict["mol_can"] = mol
+        # mol_dict["props"] = dict
+        # mol_dict["mol"] = mol
         return mol_dict
         # return ([mol], dict)
 
 
 def gen_confs_mmff(mol, num, nconfs, seed):
+    params = Chem.ETKDGv3()
+    params.useSmallRingTorsions = True
+    params.useMacrocycleTorsions = True
+    #params.pruneRmsThresh = threshold
+    params.numThreads = 0
+    params.randomSeed = seed
     mol_H = Chem.AddHs(mol)
-    Chem.EmbedMultipleConfs(mol_H, numConfs=nconfs, randomSeed=seed, ETversion=2, numThreads=0)
+    Chem.EmbedMultipleConfs(mol_H, numConfs=nconfs, params=params)
+    #Chem.EmbedMultipleConfs(mol_H, numConfs=nconfs, randomSeed=seed, ETversion=2, numThreads=0)
     try:
-        Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0)
+        Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0, maxIters=2000)
     except:
         pass
     mol_3D = Chem.RemoveHs(mol_H)
     print(num)
     return (mol_3D, num)
 
-
-def sdf_write_props(pool_results, output):
-    mol_blocks = []
-    for entry in pool_results:
-        block = Chem.MolToMolBlock(entry[0]).rstrip("\n").split("\n")
-        for line in block:
-            if line.startswith("     RDKit          2D"):
-                new_line = "   VSFlow   version1.0"
-                block[block.index("     RDKit          2D")] = new_line
-        for tag in entry[1].items():
-            block.append(f">  <{tag[0]}>")
-            block.append(f"{tag[1]}")
-            block.append("")
-        mol_blocks.append(block)
-    with open(output, "w") as writefile:
-        for block in mol_blocks:
-            for line in block:
-                writefile.write(f"{line}\n")
-            writefile.write("$$$$\n")
 
 
 def canon_mol(args):
@@ -1027,6 +937,11 @@ def canon_mol(args):
             except KeyError:
                 key = "mol"
             break
+        # if args.threshold:
+        #     threshold = args.threshold
+        # else:
+        #     threshold = -1.0
+        print(key)
         seed = random.randint(0, 10000)
         if args.mpi:
             print("mpi")
@@ -1036,13 +951,19 @@ def canon_mol(args):
                 mols[entry[1]]["confs"] = entry[0]
             can_pool.close()
         else:
-
+            params = Chem.ETKDGv3()
+            params.useSmallRingTorsions = True
+            params.useMacrocycleTorsions = True
+            #params.pruneRmsThresh = threshold
+            params.numThreads = 0
+            params.randomSeed = seed
             counter = 0
             for i in mols:
                 mol_H = Chem.AddHs(mols[i][key])
-                Chem.EmbedMultipleConfs(mol_H, numConfs=args.nconfs, randomSeed=seed, ETversion=2, numThreads=0)
+                Chem.EmbedMultipleConfs(mol_H, numConfs=100, params=params)
+                #Chem.EmbedMultipleConfs(mol_H, numConfs=args.nconfs, randomSeed=seed, ETversion=2, numThreads=0)
                 try:
-                    Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0)
+                    Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0, maxIters=2000)
                 except:
                     pass
                 #mol_3D = Chem.RemoveHs(mol_H)
