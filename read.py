@@ -3,7 +3,6 @@ from molvs.standardize import Standardizer
 from rdkit.Chem import AllChem as Chem
 from itertools import groupby
 from xlrd import open_workbook
-import multiprocessing as mp
 
 
 def query_standardize(mol):
@@ -137,7 +136,7 @@ def read_sd_3d(infile):
     for i in range(len(sd_blocks)):
         mol_block_list = sd_blocks[i][:sd_blocks[i].index("M  END\n") + 1]
         mol_block = ''.join([elem for elem in mol_block_list])
-        mol = Chem.MolFromMolBlock(mol_block)
+        mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
         if mol:
             sub[i] = {"mol": mol, "pattern": Chem.MolToSmiles(mol)}
     return sub
