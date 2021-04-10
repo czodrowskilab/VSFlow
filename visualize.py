@@ -277,14 +277,18 @@ def fp_maps(results, query, fingerprint, fpradius, nbits, features, metric, out_
 
 
 def export_pymol(file1, file2):
-    #py_object1 = file1.rsplit(".sdf", maxsplit=1)[0]
+    py_object1 = file1.rsplit(".sdf", maxsplit=1)[0]
     py_object2 = file2.rsplit(".sdf", maxsplit=1)[0]
-    pref = py_object2.split("/")[-1]
-    #print(py_object2)
+    pref1 = py_object1.split("/")[-1]
+    pref2 = py_object2.split("/")[-1]
+    print(pref2)
     cmd.load(filename=file1)
+    cmd.set_name(pref1, "query_conf")
     cmd.load(filename=file2)
-    cmd.split_states(object=pref)
-    cmd.delete(pref)
+    cmd.split_states(object="query_conf")
+    cmd.split_states(object=pref2)
+    cmd.delete("query_conf")
+    cmd.delete(pref2)
     cmd.save(f"{py_object2}.pse")
 
 
