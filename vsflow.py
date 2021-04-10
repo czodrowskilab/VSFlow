@@ -681,19 +681,39 @@ fp_sim.set_defaults(func=fingerprint)
 
 shape_sim = subparsers.add_parser("shape")
 shape_group = shape_sim.add_mutually_exclusive_group(required=True)
-shape_group.add_argument("-in", "--input")
+shape_group.add_argument("-i", "--input")
 shape_group.add_argument("-smi", "--smiles", action="append")
-shape_sim.add_argument("-out", "--output", default="shape.sdf")
-shape_sim.add_argument("-db", "--database", default=db_default)
-shape_sim.add_argument("-np", "--mpi_np", type=int)
+shape_sim.add_argument("-o", "--output", default="shape.sdf")
+shape_sim.add_argument("-d", "--database", default=db_default)
+shape_sim.add_argument("-np", "--nproc", type=int)
 shape_sim.add_argument("-py", "--pymol", action="store_true")
 shape_sim.add_argument("-top", "--top_hits", default=10, type=int)
 shape_sim.add_argument("-am", "--align_method", choices=["mmff", "crippen"], default="mmff")
-shape_sim.add_argument("-pdf", "--PDF", action="store_true")
-
+shape_sim.add_argument("--pdf", action="store_true")
+shape_sim.add_argument("--shapeonly", action="store_true")
+shape_sim.add_argument("--max_confs", default=1, type=int)
+shape_sim.add_argument("--boost", action="store_true", help="use all available threads on your cpu for conformer "
+                                                            "generation and 3D alignment at any time")
 
 
 def shape(args):
+    # check args.nproc
+    if args.nproc:
+        if 1 < args.nproc < mp.cpu_count():
+            print(f"Running in parallel mode on {args.nproc} threads")
+            pass
+        elif args.nproc <= 1:
+            print("Running in single core mode")
+            args.nproc = None
+        else:
+            args.nproc = mp.cpu_count()
+            print(f"Running in parallel mode on {args.nproc} threads")
+    else:
+        print("Running in single core mode")
+    if args.boost:
+        nthreads = 0
+    else:
+        nthreads = 1
     mols = {}
     if args.database in db_config:
         try:
@@ -726,33 +746,52 @@ def shape(args):
     num_confs = db_desc[1]
 
     if args.smiles:
-
         query = read.read_smiles_std(args.smiles)
     else:
         query = read.read_sd_3d(args.input)
-
         print(query)
     # perform shape screening with specified parameters
-    if args.mpi_np:
-        pool_shape = mp.Pool(processes=args.mpi_np)
-        query_confs = pool_shape.starmap(shapesearch.gen_query_conf_mp, [(query[i]["mol"], i, num_confs, seed) for i in query])
-        print(query_confs)
-        for entry in query_confs:
-            query[entry[0]]["confs"] = entry[1]
-            query[entry[0]]["fp_shape"] = entry[2]
-        del query_confs
-        print(query)
-        aligns = pool_shape.starmap(shapesearch.shape_pfp_tani_mp, [(mols[i]["confs"], i, query[j]["confs"], query[j]["fp_shape"], j)
-                                                for i in mols for j in query])
-        print(aligns)
-        print(max(aligns))
-        aligns = sorted(aligns, reverse=True)
+    if args.nproc:
+        pool_shape = mp.Pool(processes=args.nproc)
+        if args.smiles:
+            mol2d_list = [(query[i]["mol"], i, num_confs, seed, args.max_confs, nthreads) for i in query]
+            mol3d_list = []
+        else:
+            mol3d_list = [(query[i]["mol"], i) for i in query if query[i]["mol"].GetConformer().Is3D()]
+            mol2d_list = [(query[i]["mol"], i, num_confs, seed, args.max_confs, nthreads) for i in query if query[i]["mol"].GetConformer().Is3D() is False]
+        if mol2d_list:
+            print(f"Generating 3D conformer(s) for {len(mol2d_list)} query molecule(s)")
+            query_confs = pool_shape.starmap(shapesearch.gen_query_conf_pfp_mp, mol2d_list)
+            print(query_confs)
+            for entry in query_confs:
+                query[entry[0]]["confs"] = entry[1]
+                query[entry[0]]["fp_shape"] = entry[2]
+            del query_confs
+            print(query)
+        if mol3d_list:
+            query_confs = pool_shape.starmap(shapesearch.gen_query_pfp_mp, mol3d_list)
+            print(query_confs)
+            for entry in query_confs:
+                query[entry[0]]["confs"] = entry[1]
+                query[entry[0]]["fp_shape"] = entry[2]
+            del query_confs
+            print(query)
+        algs = pool_shape.starmap(shapesearch.shape_tani_mp, [(mols[i]["confs"], i, query[j]["confs"], j,
+                                                               query[j]["fp_shape"], k, nthreads) for i in mols for j
+                                                              in query for k in
+                                                              range(query[j]["confs"].GetNumConformers())])
         pool_shape.close()
     else:
-        shapesearch.gen_query_conf_pfp(query, num_confs, seed)
-        aligns = shapesearch.shape_pfp_tani(mols, query)
-    # prepare and write results to output files
-    grouped = [res[:args.top_hits] for res in (list(group) for k, group in groupby(aligns, lambda x: x[3]))]
+        shapesearch.gen_query_conf_pfp(query, num_confs, seed, args.max_confs, nthreads)
+        algs = shapesearch.shape_pfp_tani(mols, query, nthreads)
+    # sort results
+    grouped_algs = [res for res in (list(group) for k, group in groupby(algs, lambda x: x[3]))]
+    grouped = []
+    for res in grouped_algs:
+        gr_res = sorted([max(conf) for conf in (list(group) for k, group in groupby(res, lambda x: x[4]))],
+                        reverse=True)[:args.top_hits]
+        grouped.append(gr_res)
+    print(grouped)
     results = {}
     counter = 0
     for entry in grouped:
@@ -761,12 +800,12 @@ def shape(args):
             mols[feat[4]]["props"]["Shape_Similarity"] = feat[1]
             mols[feat[4]]["props"]["3D_FP_Similarity"] = feat[2]
             mols[feat[4]]["props"]["QuerySmiles"] = query[feat[3]]["pattern"]
-            # results[counter] = {"mol": mols[feat[4]]["confs"], "props": mols[feat[4]]["props"], "top_conf": feat[5],
-            #                     "q_num": feat[3]}
             results[counter] = {"mol": feat[6], "props": mols[feat[4]]["props"], "top_conf": feat[5],
                                 "q_num": feat[3]}
             counter += 1
     print(results)
+    # write results to output files
+    print(len(results))
     out_file = args.output.rsplit(".sdf", maxsplit=1)[0]
     for j in query:
         with open(f"{out_file}_{j + 1}.sdf", "w") as out:
@@ -774,17 +813,13 @@ def shape(args):
                 if results[i]["q_num"] == j:
                     write_output.write_sdf_conformer(results[i]["mol"], results[i]["props"], results[i]["top_conf"], out)
         with open(f"{out_file}_{j + 1}_query.sdf", "w") as out_q:
-            write_output.write_sdf_conformer(query[j]["confs"], {"Smiles": query[j]["pattern"]}, 0, out_q)
+            for confid in range(query[j]["confs"].GetNumConformers()):
+                write_output.write_sdf_conformer(query[j]["confs"], {"Smiles": query[j]["pattern"]}, confid, out_q)
     if args.pymol:
-        #path = os.path.dirname(os.path.abspath(args.output))
         for j in query:
-            #print(f"{out_file}_{j + 1}".split("/")[])
-            #pref = f"{out_file}_{j + 1}_query".split("/")[-1]
             visualize.export_pymol(f"{out_file}_{j + 1}_query.sdf", f"{out_file}_{j + 1}.sdf")
-    if args.PDF:
+    if args.pdf:
         visualize.gen_pdf_shape(query, results, out_file, ttf_path)
-
-
 
 
 shape_sim.set_defaults(func=shape)
@@ -855,9 +890,9 @@ def gen_confs_mmff(mol, num, nconfs, seed):
         Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0, maxIters=2000)
     except:
         pass
-    mol_3D = Chem.RemoveHs(mol_H)
+    #mol_3D = Chem.RemoveHs(mol_H)
     print(num)
-    return (mol_3D, num)
+    return (mol_H, num)
 
 
 
