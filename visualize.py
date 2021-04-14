@@ -281,7 +281,6 @@ def export_pymol(file1, file2):
     py_object2 = file2.rsplit(".sdf", maxsplit=1)[0]
     pref1 = py_object1.split("/")[-1]
     pref2 = py_object2.split("/")[-1]
-    print(pref2)
     cmd.load(filename=file1)
     cmd.set_name(pref1, "query_conf")
     cmd.load(filename=file2)
