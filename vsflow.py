@@ -679,6 +679,8 @@ def fingerprint(args):
 fp_sim.set_defaults(func=fingerprint)
 
 
+## shape similarity search
+
 shape_sim = subparsers.add_parser("shape")
 shape_group = shape_sim.add_mutually_exclusive_group(required=True)
 shape_group.add_argument("-i", "--input")
@@ -692,8 +694,18 @@ shape_sim.add_argument("-am", "--align_method", choices=["mmff", "crippen"], def
 shape_sim.add_argument("--pdf", action="store_true")
 shape_sim.add_argument("--shapeonly", action="store_true")
 shape_sim.add_argument("--max_confs", default=1, type=int)
-shape_sim.add_argument("--boost", action="store_true", help="use all available threads on your cpu for conformer "
-                                                            "generation and 3D alignment at any time")
+shape_sim.add_argument("--boost", action="store_true", help="distributes query conformer generation and 3D alignment on "
+                                                            "all available threads of your cpu")
+shape_sim.add_argument("--pharm_feats", choices=["gobbi", "base", "minimal"], default="gobbi", help="select pharmacophore feature "
+                                                                                          "definitions to be used for "
+                                                                                          "calculation of 3D fps. "
+                                                                                          "[default: 'gobbi']")
+shape_sim.add_argument("--shape_simi", choices=["tan", "protr", "tver"], default="tan")
+shape_sim.add_argument("--fp_simi", choices=["tan", "dice", "cos", "sok", "russ", "kulc", "mcco", "tver"], default="tan")
+shape_sim.add_argument("--tver_alpha", help="specify alpha parameter (weighs database molecule) for Tversky similarity "
+                                         "[default: 0.5]", default=0.5, type=float, metavar="")
+shape_sim.add_argument("--tver_beta", help="specify beta parameter (weighs query molecule) for Tversky similarity "
+                                        "[default: 0.5]", default=0.5, type=float, metavar="")
 
 
 def shape(args):
@@ -736,7 +748,8 @@ def shape(args):
                 parser.error(message="Database must be in format .vsdb. Use mode preparedb to prepare a database for"
                                      " shape similarity screening.")
         else:
-            parser.error(message=f"{args.database} could not be opened. Please make sure you specified the correct path")
+            parser.error(message=f"{args.database} could not be opened. "
+                                 f"Please make sure you specified the correct path")
 
     db_desc = mols.pop("config")
     if db_desc[1] == 0:
@@ -754,11 +767,12 @@ def shape(args):
     if args.nproc:
         pool_shape = mp.Pool(processes=args.nproc)
         if args.smiles:
-            mol2d_list = [(query[i]["mol"], i, num_confs, seed, args.max_confs, nthreads) for i in query]
+            mol2d_list = [(query[i]["mol"], i, num_confs, seed, args.max_confs, nthreads, args.pharm_feats) for i in query]
             mol3d_list = []
         else:
-            mol3d_list = [(query[i]["mol"], i) for i in query if query[i]["mol"].GetConformer().Is3D()]
-            mol2d_list = [(query[i]["mol"], i, num_confs, seed, args.max_confs, nthreads) for i in query if query[i]["mol"].GetConformer().Is3D() is False]
+            mol3d_list = [(query[i]["mol"], i, args.pharm_feats) for i in query if query[i]["mol"].GetConformer().Is3D()]
+            mol2d_list = [(query[i]["mol"], i, num_confs, seed, args.max_confs, nthreads, args.pharm_feats) for i in query if
+                          query[i]["mol"].GetConformer().Is3D() is False]
         if mol2d_list:
             print(f"Generating 3D conformer(s) for {len(mol2d_list)} query molecule(s)")
             query_confs = pool_shape.starmap(shapesearch.gen_query_conf_pfp_mp, mol2d_list)
@@ -776,14 +790,18 @@ def shape(args):
                 query[entry[0]]["fp_shape"] = entry[2]
             del query_confs
             print(query)
-        algs = pool_shape.starmap(shapesearch.shape_tani_mp, [(mols[i]["confs"], i, query[j]["confs"], j,
-                                                               query[j]["fp_shape"], k, nthreads) for i in mols for j
+        # algs = pool_shape.starmap(shapesearch.shape_tani_mp, [(mols[i]["confs"], i, query[j]["confs"], j,
+        #                                                        query[j]["fp_shape"], k, nthreads) for i in mols for j
+        #                                                       in query for k in
+        #                                                       range(query[j]["confs"].GetNumConformers())])
+        algs = pool_shape.starmap(shapesearch.shape_mp, [(mols[i]["confs"], i, query[j]["confs"], j,
+                                                               query[j]["fp_shape"], k, nthreads, args.shape_simi, args.fp_simi, args.tver_alpha, args.tver_beta, args.align_method, args.pharm_feats) for i in mols for j
                                                               in query for k in
                                                               range(query[j]["confs"].GetNumConformers())])
         pool_shape.close()
     else:
-        shapesearch.gen_query_conf_pfp(query, num_confs, seed, args.max_confs, nthreads)
-        algs = shapesearch.shape_pfp_tani(mols, query, nthreads)
+        shapesearch.gen_query_conf_pfp(query, num_confs, seed, args.max_confs, nthreads, args.align_method, args.pharm_feats)
+        algs = shapesearch.shape_search(mols, query, nthreads, args.align_method, args.shape_simi, args.fp_simi, args.pharm_feats, args.tver_alpha, args.tver_beta)
     # sort results
     grouped_algs = [res for res in (list(group) for k, group in groupby(algs, lambda x: x[3]))]
     grouped = []
@@ -825,7 +843,7 @@ def shape(args):
 shape_sim.set_defaults(func=shape)
 
 
-
+## prepare databases for screening
 
 canon = subparsers.add_parser("preparedb")
 # canon_group = canon.add_mutually_exclusive_group()
