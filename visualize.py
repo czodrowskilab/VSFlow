@@ -212,13 +212,14 @@ def gen_pdf_shape(query, results, out_file, ttf_path):
         mol_keys = []
         for n in results:
             if results[n]["q_num"] == m:
-                Chem.Compute2DCoords(results[n]["mol"])
+                write_mol = Chem.RemoveHs(results[n]["mol"])
+                Chem.Compute2DCoords(write_mol)
                 acols = {}
                 bcols = {}
                 h_rads = {}
                 h_lw_mult = {}
                 d = rdMolDraw2D.MolDraw2DCairo(600, 600)
-                d.DrawMoleculeWithHighlights(results[n]["mol"], "", acols, bcols, h_rads, h_lw_mult, -1)
+                d.DrawMoleculeWithHighlights(write_mol, "", acols, bcols, h_rads, h_lw_mult, -1)
                 d.FinishDrawing()
                 d.WriteDrawingText(f"{n}.png")
                 mol_keys.append(n)
