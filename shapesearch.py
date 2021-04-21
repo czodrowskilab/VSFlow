@@ -52,7 +52,7 @@ def gen_query_conf_pfp(query: dict, num_confs: int, seed: int, max_confs, nthrea
                 pass
             else:
                 mol_conf.RemoveAllConformers()
-                #print("Generating 3D conformer(s) for query molecule(s)")
+                print(f"Generating 3D conformer(s) for query molecule {i}")
                 Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, params=params)
                 #Chem.EmbedMultipleConfs(mol_H, numConfs=num_confs, randomSeed=seed, ETversion=2, numThreads=0)
                 try:
@@ -151,41 +151,42 @@ def shape_search(mols, query, nthreads, align_method, dist, fp_simi, pharm_def, 
     counter = 0
     score = []
     for j in mols:
-        db_mol_params = align_contribs[align_method](mols[j]["confs"])
-        for i in query:
-            for confid in range(query[i]["confs"].GetNumConformers()):
-                # algns = Chem.GetO3AForProbeConfs(mols[j]["confs"], query[i]["confs"],
-                #                                        prbPyMMFFMolProperties=db_mol_params,
-                #                                        refPyMMFFMolProperties=query[i]["param"], refCid=confid,
-                #                                        numThreads=nthreads)
-                algns = mol_align[align_method](mols[j]["confs"], query[i]["confs"], nthreads,
-                                                db_mol_params,
-                                                query[i]["param"],
-                                                refCid=confid)
-                shape_simis = []
-                if dist == "tver":
-                    for k in range(len(algns)):
-                        algns[k].Align()
-                        shape_simis.append(
-                            (Chem.ShapeTverskyIndex(mols[j]["confs"], query[i]["confs"], tva, tvb, confId1=k, confId2=confid), k))
-                else:
-                    for k in range(len(algns)):
-                        algns[k].Align()
-                        shape_simis.append((1 - shape_dist[dist](mols[j]["confs"], query[i]["confs"], confId1=k,
-                                                                       confId2=confid), k))
-                max_shape_sim = max(shape_simis)[0]
-                fp_db = Generate.Gen2DFingerprint(mols[j]["confs"], feat_factory[pharm_def],
-                                                  dMat=Chem.Get3DDistanceMatrix(mols[j]["confs"],
-                                                                                confId=max(shape_simis)[1]))
-                pfp_sim = sim(query[i]["fp_shape"][confid], fp_db, fp_simi, tva, tvb)
-                combo = max_shape_sim + pfp_sim
-                score.append((combo, max_shape_sim, pfp_sim, i, j, max(shape_simis)[1], mols[j]["confs"]))
-                print(counter)
-                counter += 1
+        if "confs" in mols[j]:
+            db_mol_params = align_contribs[align_method](mols[j]["confs"])
+            for i in query:
+                for confid in range(query[i]["confs"].GetNumConformers()):
+                    # algns = Chem.GetO3AForProbeConfs(mols[j]["confs"], query[i]["confs"],
+                    #                                        prbPyMMFFMolProperties=db_mol_params,
+                    #                                        refPyMMFFMolProperties=query[i]["param"], refCid=confid,
+                    #                                        numThreads=nthreads)
+                    algns = mol_align[align_method](mols[j]["confs"], query[i]["confs"], nthreads,
+                                                    db_mol_params,
+                                                    query[i]["param"],
+                                                    refCid=confid)
+                    shape_simis = []
+                    if dist == "tver":
+                        for k in range(len(algns)):
+                            algns[k].Align()
+                            shape_simis.append(
+                                (Chem.ShapeTverskyIndex(mols[j]["confs"], query[i]["confs"], tva, tvb, confId1=k, confId2=confid), k))
+                    else:
+                        for k in range(len(algns)):
+                            algns[k].Align()
+                            shape_simis.append((1 - shape_dist[dist](mols[j]["confs"], query[i]["confs"], confId1=k,
+                                                                           confId2=confid), k))
+                    max_shape_sim = max(shape_simis)[0]
+                    fp_db = Generate.Gen2DFingerprint(mols[j]["confs"], feat_factory[pharm_def],
+                                                      dMat=Chem.Get3DDistanceMatrix(mols[j]["confs"],
+                                                                                    confId=max(shape_simis)[1]))
+                    pfp_sim = sim(query[i]["fp_shape"][confid], fp_db, fp_simi, tva, tvb)
+                    combo = max_shape_sim + pfp_sim
+                    score.append((combo, max_shape_sim, pfp_sim, i, j, max(shape_simis)[1], mols[j]["confs"], confid, mols[j]["pattern"]))
+                    print(counter)
+                    counter += 1
     return score
 
 
-def shape_mp(db_mol, i, query_mol, j, query_fp, confid, nthreads, dist, fp_simi, tva, tvb, align_method, pharm_def):
+def shape_mp(db_mol, i, db_smi, query_mol, j, query_fp, confid, nthreads, dist, fp_simi, tva, tvb, align_method, pharm_def):
     fp_q = query_fp[confid]
     algns = mol_align[align_method](db_mol, query_mol, nthreads,
                                            align_contribs[align_method](db_mol),
@@ -205,5 +206,4 @@ def shape_mp(db_mol, i, query_mol, j, query_fp, confid, nthreads, dist, fp_simi,
                                           dMat=Chem.Get3DDistanceMatrix(db_mol, confId=max(shape_simis)[1]))
     pfp_sim = sim(fp_q, fp_db, fp_simi, tva, tvb)
     combo = max_shape_sim + pfp_sim
-    return (combo, max_shape_sim, pfp_sim, j, i, max(shape_simis)[1], db_mol, confid)
-
+    return (combo, max_shape_sim, pfp_sim, j, i, max(shape_simis)[1], db_mol, confid, db_smi)
