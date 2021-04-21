@@ -422,14 +422,14 @@ fp_sim.add_argument("-m", "--mode", help="choose a mode for similarity search [s
                     choices=["std", "all_tauts", "can_taut", "no_std"], default="std", metavar="")
 fp_sim.add_argument("-np", "--nproc", type=int, help="Specify the number of processors used when the application is "
                                                       "run in multiprocessing mode.", metavar="")
-fp_sim.add_argument("-f", "--fingerprint", help="specify fingerprint to be used [rdkit, ecfp, fcfp, ap, tt, maccs]",
+fp_sim.add_argument("-f", "--fingerprint", help="specify fingerprint to be used [rdkit, ecfp, fcfp, ap, tt, maccs], [default: fcfp]",
                     choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs"], default="fcfp", metavar="")
 fp_sim.add_argument("-r", "--radius", help="specify radius of circular fingerprints ecfp and fcfp [default: 3]",
                     type=int, default=3, metavar="")
 fp_sim.add_argument("-nb", "--nbits", help="specify bit size of fingerprints [default: 4096]", type=int,
                     default=4096, metavar="")
 fp_sim.add_argument("-s", "--similarity", help="specify fingerprint similarity metric to be used [tan, dice, cos, sok, "
-                                               "russ, kulc, mcco, tver]",
+                                               "russ, kulc, mcco, tver], [default: tan]",
                     choices=["tan", "dice", "cos", "sok", "russ", "kulc", "mcco", "tver"], default="tan", metavar="")
 fp_sim.add_argument("-t", "--top_hits", type=int, default=10,
                     help="Maximum number of molecules with highest similarity to keep [default: 10]", metavar="")
@@ -686,31 +686,48 @@ fp_sim.set_defaults(func=fingerprint)
 
 shape_sim = subparsers.add_parser("shape")
 shape_group = shape_sim.add_mutually_exclusive_group(required=True)
-shape_group.add_argument("-i", "--input")
-shape_group.add_argument("-smi", "--smiles", action="append")
-shape_sim.add_argument("-o", "--output", default="shape.sdf")
-shape_sim.add_argument("-d", "--database", default=db_default)
-shape_sim.add_argument("-np", "--nproc", type=int)
-shape_sim.add_argument("-py", "--pymol", action="store_true")
-shape_sim.add_argument("-top", "--top_hits", default=10, type=int)
-shape_sim.add_argument("-am", "--align_method", choices=["mmff", "crippen"], default="mmff")
-shape_sim.add_argument("--pdf", action="store_true")
-shape_sim.add_argument("-s", "--score", choices=["combo", "shapeonly"], default="combo", metavar="")
-shape_sim.add_argument("-c", "--cutoff", type=float)
-shape_sim.add_argument("-r", "--random", type=int)
-shape_sim.add_argument("--max_confs", default=1, type=int)
-shape_sim.add_argument("--boost", action="store_true", help="distributes query conformer generation and 3D alignment on "
-                                                            "all available threads of your cpu")
-shape_sim.add_argument("--pharm_feats", choices=["gobbi", "base", "minimal"], default="gobbi", help="select pharmacophore feature "
-                                                                                          "definitions to be used for "
-                                                                                          "calculation of 3D fps. "
-                                                                                          "[default: 'gobbi']")
-shape_sim.add_argument("--shape_simi", choices=["tan", "protr", "tver"], default="tan")
-shape_sim.add_argument("--fp_simi", choices=["tan", "dice", "cos", "sok", "russ", "kulc", "mcco", "tver"], default="tan")
+shape_group.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="")
+shape_group.add_argument("-smi", "--smiles", action="append",
+                         help="specify SMILES string on command line in double quotes", metavar="")
+shape_sim.add_argument("-o", "--output", help="specify name of output file [default: shape.sdf]", default="shape.sdf",
+                       metavar="")
+shape_sim.add_argument("-d", "--database", help="specify path of the database file [sdf or vsdb] or specify the "
+                                                "shortcut for an integrated database", default=db_default, metavar="")
+shape_sim.add_argument("-np", "--nproc", help="Specify the number of processors to run the application in "
+                                              "multiprocessing mode", type=int, metavar="")
+shape_sim.add_argument("-t", "--top_hits", default=10, type=int, help="Maximum number of molecules with highest "
+                                                                      "score to keep [default: 10]", metavar="")
+shape_sim.add_argument("-a", "--align_method", choices=["mmff", "crippen"], default="mmff",
+                       help="select method for molecular alignment [mmff, crippen], [default: mmff]", metavar="")
+shape_sim.add_argument("-s", "--score", choices=["combo", "shapeonly"], default="combo",
+                       help="select score to be used to rank the results", metavar="")
+shape_sim.add_argument("-c", "--cutoff", type=float,
+                       help="if specified, all molecules with score above cutoff are kept", metavar="")
+shape_sim.add_argument("--seed", type=int,
+                       help="specify seed for random number generator, for reproducibility", metavar="")
+shape_sim.add_argument("--keep_confs", default=1, type=int,
+                       help="number of query conformations to keep after energy minimization [default: 1]", metavar="")
+shape_sim.add_argument("--nconfs", default=100, type=int,
+                       help="maximum number of query conformations to be enumerated [default: 100]", metavar="")
+shape_sim.add_argument("--boost", action="store_true",
+                       help="distributes query conformer generation and 3D alignment on all available threads of "
+                            "your cpu")
+shape_sim.add_argument("--pharm_feats", choices=["gobbi", "base", "minimal"], default="gobbi",
+                       help="select pharmacophore feature definitions to be used for calculation of 3D fps. "
+                            "[default: 'gobbi']", metavar="")
+shape_sim.add_argument("--shape_simi", choices=["tan", "protr", "tver"], default="tan",
+                       help="specify measure to be used to compare shape similarity [tan, protr, tver], "
+                            "[default: tver]", metavar="")
+shape_sim.add_argument("--fp_simi", choices=["tan", "dice", "cos", "sok", "russ", "kulc", "mcco", "tver"],
+                       default="tan",
+                       help="specify measure to be used to for pharmacophore similarity "
+                            "[tan, dice, cos, sok, russ, kulc, mcco, tver]", metavar="")
 shape_sim.add_argument("--tver_alpha", help="specify alpha parameter (weighs database molecule) for Tversky similarity "
-                                         "[default: 0.5]", default=0.5, type=float, metavar="")
+                                            "[default: 0.5]", default=0.5, type=float, metavar="")
 shape_sim.add_argument("--tver_beta", help="specify beta parameter (weighs query molecule) for Tversky similarity "
-                                        "[default: 0.5]", default=0.5, type=float, metavar="")
+                                           "[default: 0.5]", default=0.5, type=float, metavar="")
+shape_sim.add_argument("--pdf", action="store_true", help="generate a pdf file for all results")
+shape_sim.add_argument("--pymol", action="store_true", help="generate PyMOL file with 3D conformations for results")
 
 
 def shape(args):
@@ -734,7 +751,6 @@ def shape(args):
     else:
         nthreads = 1
     mols = {}
-    from_sd = False
     if args.database in db_config:
         try:
             mols = pickle.load(open(f"{config['local_db']}/{args.database}.vsdb", "rb"))
@@ -767,11 +783,20 @@ def shape(args):
         # if db_desc[1] == 0:
         #     parser.error(message=f"Database {args.database} does not contain conformers. Use mode preparedb to generate "
         #                          f"conformers and prepare a database for shape similarity screening")
+
         seed = db_desc[3]
-        num_confs = db_desc[1]
+        if seed is None:
+            if args.seed:
+                seed = args.seed
+            else:
+                seed = random.randint(1, 10000)
+        # num_confs = db_desc[1]
     except KeyError:
-        seed = random.randint(1, 10000)
-        num_confs = 100
+        if args.seed:
+            seed = args.seed
+        else:
+            seed = random.randint(1, 10000)
+        # num_confs = 100
     # read query
     if args.smiles:
         query = read.read_smiles_std(args.smiles)
@@ -782,11 +807,11 @@ def shape(args):
     if args.nproc:
         pool_shape = mp.Pool(processes=args.nproc)
         if args.smiles:
-            mol2d_list = [(query[i]["mol"], i, num_confs, seed, args.max_confs, nthreads, args.pharm_feats) for i in query]
+            mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query]
             mol3d_list = []
         else:
             mol3d_list = [(query[i]["mol"], i, args.pharm_feats) for i in query if query[i]["mol"].GetConformer().Is3D()]
-            mol2d_list = [(query[i]["mol"], i, num_confs, seed, args.max_confs, nthreads, args.pharm_feats) for i in query if
+            mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query if
                           query[i]["mol"].GetConformer().Is3D() is False]
         if mol2d_list:
             print(f"Generating 3D conformer(s) for {len(mol2d_list)} query molecule(s)")
@@ -814,7 +839,7 @@ def shape(args):
                                                               range(query[j]["confs"].GetNumConformers()) if "confs" in mols[i]])
         pool_shape.close()
     else:
-        shapesearch.gen_query_conf_pfp(query, num_confs, seed, args.max_confs, nthreads, args.align_method, args.pharm_feats)
+        shapesearch.gen_query_conf_pfp(query, args.nconfs, seed, args.keep_confs, nthreads, args.align_method, args.pharm_feats)
         algs = shapesearch.shape_search(mols, query, nthreads, args.align_method, args.shape_simi, args.fp_simi, args.pharm_feats, args.tver_alpha, args.tver_beta)
     # sort results
     grouped_algs = [res for res in (list(group) for k, group in groupby(algs, lambda x: x[3]))]
@@ -902,74 +927,28 @@ shape_sim.set_defaults(func=shape)
 ## prepare databases for screening
 
 canon = subparsers.add_parser("preparedb")
-# canon_group = canon.add_mutually_exclusive_group()
-canon_group = canon.add_mutually_exclusive_group(required=True)
-canon.add_argument("-in", "--input", required=True)
-canon.add_argument("-np", "--mpi", type=int)
-canon_group.add_argument("-out", "--output")
-canon_group.add_argument("-int", "--integrate", help="specify shortcut for database")
-canon.add_argument("-intg", "--int_global", help="Stores database by default within the folder of the script", action="store_true")
-canon.add_argument("-nt", "--ntauts", help="maximum number of tautomers to be enumerated during standardization process", type=int, default=100)
-canon.add_argument("-st", "--standardize", help="standardizes molecules, removes salts and associated charges", action="store_true")
-canon.add_argument("-c", "--conformers", help="generates multiple 3D conformers, required for mode shape", action="store_true")
-canon.add_argument("-nc", "--nconfs", help="number of conformers generated", type=int, default=20)
-canon.add_argument("-t", "--threshold", help="Retain only the conformations out of nconfs that are at least "
-                                             "this far apart from each other (RMSD calculated on heavy atoms)", type=float)
-canon.add_argument("--seed", type=int)
-canon.add_argument("--boost", action="store_true")
-# canon_group.add_argument("-can", "--canonicalize", help="standardizes molecules, removes salts and associated charges and canonicalizes tautomers", action="store_true")
-#canon_group.add_argument("-ats", "--all_tauts", help="generate all possible tautomers for molecule up to a maximum specified in --ntauts", action="store_true")
-
-
-
-
-# def do_standard(mol, dict, ntauts):
-#     mol_dict = {}
-#     try:
-#         mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
-#         mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol_sta)
-#         # mol_dict["mol_sta"] = mol_sta
-#         # mol_dict["mol_can"] = mol_can
-#         # mol_dict["props"] = dict
-#         # mol_dict["mol"] = mol
-#         mol_dict["mol_sta"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol_sta))
-#         mol_dict["mol_can"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol_can))
-#         mol_dict["props"] = dict
-#         mol_dict["mol"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
-#         # return (mol_can, dict)
-#         return mol_dict
-#     except:
-#         # return (mol, dict)
-#         mol_dict["mol_sta"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
-#         mol_dict["mol_can"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
-#         mol_dict["props"] = dict
-#         mol_dict["mol"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
-#         # mol_dict["mol_sta"] = mol
-#         # mol_dict["mol_can"] = mol
-#         # mol_dict["props"] = dict
-#         # mol_dict["mol"] = mol
-#         return mol_dict
-#         # return ([mol], dict)
-#
-#
-# def gen_confs_mmff(mol, num, nconfs, seed):
-#     params = Chem.ETKDGv3()
-#     params.useSmallRingTorsions = True
-#     params.useMacrocycleTorsions = True
-#     #params.pruneRmsThresh = threshold
-#     params.numThreads = 0
-#     params.randomSeed = seed
-#     mol_H = Chem.AddHs(mol)
-#     Chem.EmbedMultipleConfs(mol_H, numConfs=nconfs, params=params)
-#     #Chem.EmbedMultipleConfs(mol_H, numConfs=nconfs, randomSeed=seed, ETversion=2, numThreads=0)
-#     try:
-#         Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0, maxIters=2000)
-#     except:
-#         pass
-#     #mol_3D = Chem.RemoveHs(mol_H)
-#     print(num)
-#     return (mol_H, num)
-
+canon.add_argument("-i", "--input", required=True, help="specify path of input file [sdf, csv, xlsx]", metavar="")
+canon.add_argument("-o", "--output", default="prep_database.vsdb", help="specify name of output file [default: prep_database.vsdb]",
+                   metavar="")
+canon.add_argument("-int", "--integrate", help="specify shortcut for database; saves database to $HOME/VSFlow_Databases", metavar="")
+canon.add_argument("-intg", "--int_global", help="stores database in {path_to_script}/Databases instead of $HOME/VSFlow_Databases, "
+                                                 "can only be specified together with --integrate flag",
+                   action="store_true")
+canon.add_argument("--max_tauts", help="maximum number of tautomers to be enumerated during standardization process",
+                   type=int, default=100, metavar="")
+canon.add_argument("-np", "--nproc", type=int, help="Specify the number of processors to run the application in "
+                                                    "multiprocessing mode", metavar="")
+canon.add_argument("-s", "--standardize", help="standardizes molecules, removes salts and associated charges",
+                   action="store_true")
+canon.add_argument("-c", "--conformers", help="generates multiple 3D conformers, required for mode shape",
+                   action="store_true")
+canon.add_argument("--nconfs", help="maximal number of conformers generated", type=int, default=20, metavar="")
+canon.add_argument("--rms_thresh", help="if specified, only those conformations out of nconfs that are at least "
+                                        "this different are retained (RMSD calculated on heavy atoms)", type=float,
+                   metavar="")
+canon.add_argument("--seed", type=int, help="specify seed for random number generator, for reproducibility", metavar="")
+canon.add_argument("--boost", help="distributes conformer generation on all available threads of your cpu",
+                   action="store_true")
 
 
 def canon_mol(args):
@@ -1049,8 +1028,8 @@ def canon_mol(args):
     seed = None
     if args.standardize:
         standardized = "yes"
-        if args.mpi:
-            can_pool = mp.Pool(processes=args.mpi)
+        if args.nproc:
+            can_pool = mp.Pool(processes=args.nproc)
             data, failed = read.read_sd_mp(args.input, can_pool)
             print(f"Finished reading sdf file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
             if failed:
@@ -1072,8 +1051,8 @@ def canon_mol(args):
                 mols[n] = std
         print(f"Finished standardizing molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     else:
-        if args.mpi:
-            can_pool = mp.Pool(processes=args.mpi)
+        if args.nproc:
+            can_pool = mp.Pool(processes=args.nproc)
             mols, failed = read.read_sd_mp(args.input, can_pool, mode="prepare")
             can_pool.close()
         else:
@@ -1098,9 +1077,8 @@ def canon_mol(args):
             seed = args.seed
         else:
             seed = random.randint(0, 10000)
-        if args.mpi:
-            print("mpi")
-            can_pool = mp.Pool(processes=args.mpi)
+        if args.nproc:
+            can_pool = mp.Pool(processes=args.nproc)
             confs = can_pool.starmap(prepare.gen_confs_mp, [(mols[i][key], i, args.nconfs, seed, nthreads) for i in mols])
             for entry in confs:
                 mols[entry[1]]["confs"] = entry[0]
@@ -1108,25 +1086,6 @@ def canon_mol(args):
             can_pool.close()
         else:
             prepare.gen_confs(mols, args.nconfs, seed, key, nthreads)
-            # params = Chem.ETKDGv3()
-            # params.useSmallRingTorsions = True
-            # params.useMacrocycleTorsions = True
-            # #params.pruneRmsThresh = threshold
-            # params.numThreads = 0
-            # params.randomSeed = seed
-            # counter = 0
-            # for i in mols:
-            #     mol_H = Chem.AddHs(mols[i][key])
-            #     Chem.EmbedMultipleConfs(mol_H, numConfs=100, params=params)
-            #     #Chem.EmbedMultipleConfs(mol_H, numConfs=args.nconfs, randomSeed=seed, ETversion=2, numThreads=0)
-            #     try:
-            #         Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0, maxIters=2000)
-            #     except:
-            #         pass
-            #     #mol_3D = Chem.RemoveHs(mol_H)
-            #     mols[i]["confs"] = mol_H
-            #     counter += 1
-            #     print(counter)
     for i in mols:
         if "confs" in mols[i]:
             conformers = "yes"
@@ -1148,11 +1107,10 @@ def canon_mol(args):
     print(f"Finished in {duration} seconds")
 
 
-
 canon.set_defaults(func=canon_mol)
 
 
-
+## show integrated databases
 
 show_db = subparsers.add_parser("managedb")
 show_db.add_argument("-d", "--default", help="specify name of database to be set as default")
