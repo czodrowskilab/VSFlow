@@ -39,6 +39,7 @@ import read
 import write_output
 import fpsearch
 import  shapesearch
+import prepare
 from rdkit.Chem.Draw import rdMolDraw2D
 
 
@@ -220,9 +221,11 @@ def read_database(args):
 
             else:
                 if args.nproc:
+                    print("here")
                     pool = mp.Pool(processes=args.nproc)
                     mols, failed = read.read_sd_mp(args.database, pool)
                     pool.close()
+
                 else:
                     mols, failed = read.read_db_from_sd(args.database)
                 if failed:
@@ -692,7 +695,9 @@ shape_sim.add_argument("-py", "--pymol", action="store_true")
 shape_sim.add_argument("-top", "--top_hits", default=10, type=int)
 shape_sim.add_argument("-am", "--align_method", choices=["mmff", "crippen"], default="mmff")
 shape_sim.add_argument("--pdf", action="store_true")
-shape_sim.add_argument("--shapeonly", action="store_true")
+shape_sim.add_argument("-s", "--score", choices=["combo", "shapeonly"], default="combo", metavar="")
+shape_sim.add_argument("-c", "--cutoff", type=float)
+shape_sim.add_argument("-r", "--random", type=int)
 shape_sim.add_argument("--max_confs", default=1, type=int)
 shape_sim.add_argument("--boost", action="store_true", help="distributes query conformer generation and 3D alignment on "
                                                             "all available threads of your cpu")
@@ -709,6 +714,8 @@ shape_sim.add_argument("--tver_beta", help="specify beta parameter (weighs query
 
 
 def shape(args):
+    start_time = time.time()
+    print(f"Start: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # check args.nproc
     if args.nproc:
         if 1 < args.nproc < mp.cpu_count():
@@ -727,6 +734,7 @@ def shape(args):
     else:
         nthreads = 1
     mols = {}
+    from_sd = False
     if args.database in db_config:
         try:
             mols = pickle.load(open(f"{config['local_db']}/{args.database}.vsdb", "rb"))
@@ -744,20 +752,27 @@ def shape(args):
                 except:
                     parser.error(message=f"{args.database} could not be opened. Please make sure the file has the correct "
                                                f"format")
+            elif args.database.endswith(".sdf"):
+                mols, _ = read.read_db_from_sd_3d(args.database)
+                if not mols:
+                    parser.exit(status=2, message="No molecules with 3D coordinates could be read from SD file !")
             else:
-                parser.error(message="Database must be in format .vsdb. Use mode preparedb to prepare a database for"
+                parser.error(message="Database must have format .vsdb or .sdf. Use mode preparedb to prepare a database for"
                                      " shape similarity screening.")
         else:
             parser.error(message=f"{args.database} could not be opened. "
                                  f"Please make sure you specified the correct path")
-
-    db_desc = mols.pop("config")
-    if db_desc[1] == 0:
-        parser.error(message=f"Database {args.database} does not contain conformers. Use mode preparedb to generate "
-                             f"conformers and prepare a database for shape similarity screening")
-    seed = db_desc[3]
-    num_confs = db_desc[1]
-
+    try:
+        db_desc = mols.pop("config")
+        # if db_desc[1] == 0:
+        #     parser.error(message=f"Database {args.database} does not contain conformers. Use mode preparedb to generate "
+        #                          f"conformers and prepare a database for shape similarity screening")
+        seed = db_desc[3]
+        num_confs = db_desc[1]
+    except KeyError:
+        seed = random.randint(1, 10000)
+        num_confs = 100
+    # read query
     if args.smiles:
         query = read.read_smiles_std(args.smiles)
     else:
@@ -776,7 +791,6 @@ def shape(args):
         if mol2d_list:
             print(f"Generating 3D conformer(s) for {len(mol2d_list)} query molecule(s)")
             query_confs = pool_shape.starmap(shapesearch.gen_query_conf_pfp_mp, mol2d_list)
-            print(query_confs)
             for entry in query_confs:
                 query[entry[0]]["confs"] = entry[1]
                 query[entry[0]]["fp_shape"] = entry[2]
@@ -794,10 +808,10 @@ def shape(args):
         #                                                        query[j]["fp_shape"], k, nthreads) for i in mols for j
         #                                                       in query for k in
         #                                                       range(query[j]["confs"].GetNumConformers())])
-        algs = pool_shape.starmap(shapesearch.shape_mp, [(mols[i]["confs"], i, query[j]["confs"], j,
+        algs = pool_shape.starmap(shapesearch.shape_mp, [(mols[i]["confs"], i, mols[i]["pattern"], query[j]["confs"], j,
                                                                query[j]["fp_shape"], k, nthreads, args.shape_simi, args.fp_simi, args.tver_alpha, args.tver_beta, args.align_method, args.pharm_feats) for i in mols for j
                                                               in query for k in
-                                                              range(query[j]["confs"].GetNumConformers())])
+                                                              range(query[j]["confs"].GetNumConformers()) if "confs" in mols[i]])
         pool_shape.close()
     else:
         shapesearch.gen_query_conf_pfp(query, num_confs, seed, args.max_confs, nthreads, args.align_method, args.pharm_feats)
@@ -805,11 +819,53 @@ def shape(args):
     # sort results
     grouped_algs = [res for res in (list(group) for k, group in groupby(algs, lambda x: x[3]))]
     grouped = []
-    for res in grouped_algs:
-        gr_res = sorted([max(conf) for conf in (list(group) for k, group in groupby(res, lambda x: x[4]))],
+    # if from_sd:
+    #     sort_key = 8
+    #     for res in grouped_algs:
+    #         for entry in res:
+    #             entry.append(mols[entry[4]]["pattern"])
+    # else:
+    #     sort_key = 4
+    if args.score == "combo":
+        sort_score = 0
+    else:
+        sort_score = 1
+    if args.cutoff:
+        for res in grouped_algs:
+            gr = sorted([max(conf, key=lambda entry: entry[sort_score]) for conf in (list(group) for k, group in groupby(res, lambda x: x[8]))], reverse=True)
+            print(gr)
+            gr_res = [entry for entry in gr if entry[sort_score] >= args.cutoff]
+            del gr
+            print(gr_res)
+            print(len(gr_res))
+            grouped.append(gr_res)
+    else:
+        for res in grouped_algs:
+            gr_res = sorted([max(conf, key=lambda entry: entry[sort_score]) for conf in (list(group) for k, group in groupby(res, lambda x: x[8]))],
                         reverse=True)[:args.top_hits]
-        grouped.append(gr_res)
-    print(grouped)
+            print(gr_res)
+            print(len(gr_res))
+            grouped.append(gr_res)
+    # else:
+    #     if args.cutoff:
+    #         for res in grouped_algs:
+    #             gr = sorted([max(conf) for conf in (list(group) for k, group in groupby(res, lambda x: x[sort_key]))],
+    #                         reverse=True)
+    #             print(gr)
+    #             gr_res = [entry for entry in gr if entry[1] >= args.cutoff]
+    #     else:
+    #         gr_res = sorted([max(conf, key=lambda entry: entry[1]) for conf in (list(group) for k, group in groupby(res, lambda x: x[8]))],
+    #                         reverse=True)[:args.top_hits]
+    # grouped.append(gr_res)
+    # else:
+    #     for res in grouped_algs:
+    #         if args.score == "combo":
+    #             gr_res = sorted([max(conf) for conf in (list(group) for k, group in groupby(res, lambda x: x[4]))],
+    #                             reverse=True)[:args.top_hits]
+    #         else:
+    #             gr_res = sorted([max(conf, key=lambda entry: entry[1]) for conf in (list(group) for k, group in groupby(res, lambda x: x[4]))],
+    #                             reverse=True)[:args.top_hits]
+    #         grouped.append(gr_res)
     results = {}
     counter = 0
     for entry in grouped:
@@ -859,65 +915,70 @@ canon.add_argument("-c", "--conformers", help="generates multiple 3D conformers,
 canon.add_argument("-nc", "--nconfs", help="number of conformers generated", type=int, default=20)
 canon.add_argument("-t", "--threshold", help="Retain only the conformations out of nconfs that are at least "
                                              "this far apart from each other (RMSD calculated on heavy atoms)", type=float)
+canon.add_argument("--seed", type=int)
+canon.add_argument("--boost", action="store_true")
 # canon_group.add_argument("-can", "--canonicalize", help="standardizes molecules, removes salts and associated charges and canonicalizes tautomers", action="store_true")
 #canon_group.add_argument("-ats", "--all_tauts", help="generate all possible tautomers for molecule up to a maximum specified in --ntauts", action="store_true")
 
 
 
 
-def do_standard(mol, dict, ntauts):
-    mol_dict = {}
-    try:
-        mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
-        mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol_sta)
-        # mol_dict["mol_sta"] = mol_sta
-        # mol_dict["mol_can"] = mol_can
-        # mol_dict["props"] = dict
-        # mol_dict["mol"] = mol
-        mol_dict["mol_sta"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol_sta))
-        mol_dict["mol_can"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol_can))
-        mol_dict["props"] = dict
-        mol_dict["mol"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
-        # return (mol_can, dict)
-        return mol_dict
-    except:
-        # return (mol, dict)
-        mol_dict["mol_sta"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
-        mol_dict["mol_can"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
-        mol_dict["props"] = dict
-        mol_dict["mol"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
-        # mol_dict["mol_sta"] = mol
-        # mol_dict["mol_can"] = mol
-        # mol_dict["props"] = dict
-        # mol_dict["mol"] = mol
-        return mol_dict
-        # return ([mol], dict)
-
-
-def gen_confs_mmff(mol, num, nconfs, seed):
-    params = Chem.ETKDGv3()
-    params.useSmallRingTorsions = True
-    params.useMacrocycleTorsions = True
-    #params.pruneRmsThresh = threshold
-    params.numThreads = 0
-    params.randomSeed = seed
-    mol_H = Chem.AddHs(mol)
-    Chem.EmbedMultipleConfs(mol_H, numConfs=nconfs, params=params)
-    #Chem.EmbedMultipleConfs(mol_H, numConfs=nconfs, randomSeed=seed, ETversion=2, numThreads=0)
-    try:
-        Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0, maxIters=2000)
-    except:
-        pass
-    #mol_3D = Chem.RemoveHs(mol_H)
-    print(num)
-    return (mol_H, num)
+# def do_standard(mol, dict, ntauts):
+#     mol_dict = {}
+#     try:
+#         mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
+#         mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol_sta)
+#         # mol_dict["mol_sta"] = mol_sta
+#         # mol_dict["mol_can"] = mol_can
+#         # mol_dict["props"] = dict
+#         # mol_dict["mol"] = mol
+#         mol_dict["mol_sta"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol_sta))
+#         mol_dict["mol_can"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol_can))
+#         mol_dict["props"] = dict
+#         mol_dict["mol"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
+#         # return (mol_can, dict)
+#         return mol_dict
+#     except:
+#         # return (mol, dict)
+#         mol_dict["mol_sta"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
+#         mol_dict["mol_can"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
+#         mol_dict["props"] = dict
+#         mol_dict["mol"] = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
+#         # mol_dict["mol_sta"] = mol
+#         # mol_dict["mol_can"] = mol
+#         # mol_dict["props"] = dict
+#         # mol_dict["mol"] = mol
+#         return mol_dict
+#         # return ([mol], dict)
+#
+#
+# def gen_confs_mmff(mol, num, nconfs, seed):
+#     params = Chem.ETKDGv3()
+#     params.useSmallRingTorsions = True
+#     params.useMacrocycleTorsions = True
+#     #params.pruneRmsThresh = threshold
+#     params.numThreads = 0
+#     params.randomSeed = seed
+#     mol_H = Chem.AddHs(mol)
+#     Chem.EmbedMultipleConfs(mol_H, numConfs=nconfs, params=params)
+#     #Chem.EmbedMultipleConfs(mol_H, numConfs=nconfs, randomSeed=seed, ETversion=2, numThreads=0)
+#     try:
+#         Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0, maxIters=2000)
+#     except:
+#         pass
+#     #mol_3D = Chem.RemoveHs(mol_H)
+#     print(num)
+#     return (mol_H, num)
 
 
 
 def canon_mol(args):
     start_time = time.time()
     print(f"Start: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
-
+    if args.boost:
+        nthreads = 0
+    else:
+        nthreads = 1
     if args.integrate:
         db_name = args.integrate
         if args.int_global:
@@ -984,7 +1045,7 @@ def canon_mol(args):
         else:
             out_path = f"{args.output}.vsdb"
     standardized = "no"
-    conformers = 0
+    conformers = "no"
     seed = None
     if args.standardize:
         standardized = "yes"
@@ -994,7 +1055,7 @@ def canon_mol(args):
             print(f"Finished reading sdf file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
             if failed:
                 print(f"{len(failed)} molecules out of {len(data)} could not be processed")
-            data_can = can_pool.starmap(do_standard, [(data[n]["mol"], data[n]["props"], args.ntauts) for n in data])
+            data_can = can_pool.starmap(prepare.do_standard, [(data[n]["mol"], data[n]["props"], args.ntauts) for n in data])
             mols = {}
             for i in range(len(data_can)):
                 mols[i] = data_can[i]
@@ -1007,20 +1068,20 @@ def canon_mol(args):
 
             mols = {}
             for n in data:
-                std = do_standard(data[n]["mol"], data[n]["props"], args.ntauts)
+                std = prepare.do_standard(data[n]["mol"], data[n]["props"], args.ntauts)
                 mols[n] = std
         print(f"Finished standardizing molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     else:
         if args.mpi:
             can_pool = mp.Pool(processes=args.mpi)
-            mols, failed = read.read_sd_mp(args.input, can_pool)
+            mols, failed = read.read_sd_mp(args.input, can_pool, mode="prepare")
             can_pool.close()
         else:
-            mols, failed = read.read_db_from_sd(args.input)
+            mols, failed = read.read_prepare_db_from_sd(args.input)
         if failed:
             print(f"{len(failed)} molecules out of {len(mols) + len(failed)} could not be processed")
     if args.conformers:
-        conformers = args.nconfs
+        conformers = "yes"
         for i in mols:
             try:
                 mol = mols[i]["mol_sta"]
@@ -1033,37 +1094,44 @@ def canon_mol(args):
         # else:
         #     threshold = -1.0
         print(key)
-        seed = random.randint(0, 10000)
+        if args.seed:
+            seed = args.seed
+        else:
+            seed = random.randint(0, 10000)
         if args.mpi:
             print("mpi")
             can_pool = mp.Pool(processes=args.mpi)
-            confs = can_pool.starmap(gen_confs_mmff, [(mols[i][key], i, args.nconfs, seed) for i in mols])
+            confs = can_pool.starmap(prepare.gen_confs_mp, [(mols[i][key], i, args.nconfs, seed, nthreads) for i in mols])
             for entry in confs:
                 mols[entry[1]]["confs"] = entry[0]
+                mols[entry[1]]["pattern"] = entry[2]
             can_pool.close()
         else:
-            params = Chem.ETKDGv3()
-            params.useSmallRingTorsions = True
-            params.useMacrocycleTorsions = True
-            #params.pruneRmsThresh = threshold
-            params.numThreads = 0
-            params.randomSeed = seed
-            counter = 0
-            for i in mols:
-                mol_H = Chem.AddHs(mols[i][key])
-                Chem.EmbedMultipleConfs(mol_H, numConfs=100, params=params)
-                #Chem.EmbedMultipleConfs(mol_H, numConfs=args.nconfs, randomSeed=seed, ETversion=2, numThreads=0)
-                try:
-                    Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0, maxIters=2000)
-                except:
-                    pass
-                #mol_3D = Chem.RemoveHs(mol_H)
-                mols[i]["confs"] = mol_H
-                counter += 1
-                print(counter)
+            prepare.gen_confs(mols, args.nconfs, seed, key, nthreads)
+            # params = Chem.ETKDGv3()
+            # params.useSmallRingTorsions = True
+            # params.useMacrocycleTorsions = True
+            # #params.pruneRmsThresh = threshold
+            # params.numThreads = 0
+            # params.randomSeed = seed
+            # counter = 0
+            # for i in mols:
+            #     mol_H = Chem.AddHs(mols[i][key])
+            #     Chem.EmbedMultipleConfs(mol_H, numConfs=100, params=params)
+            #     #Chem.EmbedMultipleConfs(mol_H, numConfs=args.nconfs, randomSeed=seed, ETversion=2, numThreads=0)
+            #     try:
+            #         Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=0, maxIters=2000)
+            #     except:
+            #         pass
+            #     #mol_3D = Chem.RemoveHs(mol_H)
+            #     mols[i]["confs"] = mol_H
+            #     counter += 1
+            #     print(counter)
+    for i in mols:
+        if "confs" in mols[i]:
+            conformers = "yes"
+        break
     mols["config"] = [standardized, conformers, len(mols), seed]
-
-    #pickle.dump(mols, open(f"{db_path}/{db_name}.vsdb", "wb"))
     pickle.dump(mols, open(out_path, "wb"))
     if args.integrate:
         db_config[db_name] = [time.ctime(os.path.getmtime(out_path)),
