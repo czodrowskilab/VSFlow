@@ -463,7 +463,45 @@ def read_mol_block(block):
         return {"mol": mol, "props": props}
 
 
-def read_sd_mp(infile, pool):
+def read_prepare_mol_block(block):
+    mol_block_list = block[:block.index("M  END\n") + 1]
+    mol_block = ''.join([elem for elem in mol_block_list])
+    mol = Chem.MolFromMolBlock(mol_block)
+    if mol:
+        name = mol.GetProp("_Name")
+        mol2d = Chem.RemoveHs(mol)
+        Chem.Compute2DCoords(mol2d)
+        tags = block[block.index("M  END\n") + 1:]
+        props = {}
+        if name:
+            props["Title"] = name
+        for line in tags:
+            if line.startswith(">  <") and not line.strip("\n").endswith(">"):
+                line_strip = line.strip("\n").strip(">  <")
+                key = line_strip[:line_strip.index(">")]
+                value = tags[tags.index(line) + 1].strip("\n")
+                props[key] = value
+            elif line.startswith(">  <") and line.strip("\n").endswith(">"):
+                key = line.strip("\n").strip("> <")
+                value = tags[tags.index(line) + 1].strip("\n")
+                props[key] = value
+            elif line.startswith("> <") and not line.strip("\n").endswith(">"):
+                line_strip = line.strip("\n").strip("> <")
+                key = line_strip[:line_strip.index(">")]
+                value = tags[tags.index(line) + 1].strip("\n")
+                props[key] = value
+            elif line.startswith("> <") and line.strip("\n").endswith(">"):
+                key = line.strip("\n").strip("> <")
+                value = tags[tags.index(line) + 1].strip("\n")
+                props[key] = value
+        if mol.GetConformer().Is3D():
+            mol3d = Chem.AddHs(mol, addCoords=True)
+            return {"mol": mol2d, "props": props, "confs": mol3d, "pattern": Chem.MolToSmiles(mol2d)}
+        else:
+            return {"mol": mol2d, "props": props}
+
+
+def read_sd_mp(infile, pool, mode="read"):
     sub = {}
     failed = []
     with open(infile, "r") as sd_file:
@@ -474,11 +512,111 @@ def read_sd_mp(infile, pool):
         return sub, failed
     del content
     # pool = mp.Pool(processes=nproc)
-    mol_dict = pool.map(read_mol_block, [block for block in sd_blocks])
+    if mode == "read":
+        mol_dict = pool.map(read_mol_block, [block for block in sd_blocks])
+    else:
+        mol_dict = pool.map(read_prepare_mol_block, [block for block in sd_blocks])
     for i in range(len(mol_dict)):
         if mol_dict[i]:
             sub[i] = mol_dict[i]
         else:
             failed.append(i)
     # pool.close()
+    return sub, failed
+
+
+def read_db_from_sd_3d(infile):
+    sub = {}
+    failed = []
+    with open(infile, "r") as sd_file:
+        content = sd_file.readlines()
+    try:
+        sd_blocks = [list(group) for k, group in groupby(content, lambda x: x == "$$$$\n") if not k]
+    except ValueError:
+        return sub, failed
+    del content
+    for i in range(len(sd_blocks)):
+        mol_block_list = sd_blocks[i][:sd_blocks[i].index("M  END\n") + 1]
+        mol_block = ''.join([elem for elem in mol_block_list])
+        mol = Chem.MolFromMolBlock(mol_block)
+        if mol:
+            name = mol.GetProp("_Name")
+            mol = Chem.AddHs(mol, addCoords=True)
+            tags = sd_blocks[i][sd_blocks[i].index("M  END\n") + 1:]
+            props = {}
+            if name:
+                props["Title"] = name
+            for line in tags:
+                if line.startswith(">  <") and not line.strip("\n").endswith(">"):
+                    line_strip = line.strip("\n").strip(">  <")
+                    key = line_strip[:line_strip.index(">")]
+                    value = tags[tags.index(line) + 1].strip("\n")
+                    props[key] = value
+                elif line.startswith(">  <") and line.strip("\n").endswith(">"):
+                    key = line.strip("\n").strip("> <")
+                    value = tags[tags.index(line) + 1].strip("\n")
+                    props[key] = value
+                elif line.startswith("> <") and not line.strip("\n").endswith(">"):
+                    line_strip = line.strip("\n").strip("> <")
+                    key = line_strip[:line_strip.index(">")]
+                    value = tags[tags.index(line) + 1].strip("\n")
+                    props[key] = value
+                elif line.startswith("> <") and line.strip("\n").endswith(">"):
+                    key = line.strip("\n").strip("> <")
+                    value = tags[tags.index(line) + 1].strip("\n")
+                    props[key] = value
+            sub[i] = {"confs": mol, "props": props, "pattern": Chem.MolToSmiles(mol)}
+        else:
+            failed.append(i)
+    return sub, failed
+
+
+def read_prepare_db_from_sd(infile):
+    sub = {}
+    failed = []
+    with open(infile, "r") as sd_file:
+        content = sd_file.readlines()
+    try:
+        sd_blocks = [list(group) for k, group in groupby(content, lambda x: x == "$$$$\n") if not k]
+    except ValueError:
+        return sub, failed
+    del content
+    for i in range(len(sd_blocks)):
+        mol_block_list = sd_blocks[i][:sd_blocks[i].index("M  END\n") + 1]
+        mol_block = ''.join([elem for elem in mol_block_list])
+        mol = Chem.MolFromMolBlock(mol_block)
+        if mol:
+            name = mol.GetProp("_Name")
+            mol2d = Chem.RemoveHs(mol)
+            Chem.Compute2DCoords(mol2d)
+            tags = sd_blocks[i][sd_blocks[i].index("M  END\n") + 1:]
+            props = {}
+            if name:
+                props["Title"] = name
+            for line in tags:
+                if line.startswith(">  <") and not line.strip("\n").endswith(">"):
+                    line_strip = line.strip("\n").strip(">  <")
+                    key = line_strip[:line_strip.index(">")]
+                    value = tags[tags.index(line) + 1].strip("\n")
+                    props[key] = value
+                elif line.startswith(">  <") and line.strip("\n").endswith(">"):
+                    key = line.strip("\n").strip("> <")
+                    value = tags[tags.index(line) + 1].strip("\n")
+                    props[key] = value
+                elif line.startswith("> <") and not line.strip("\n").endswith(">"):
+                    line_strip = line.strip("\n").strip("> <")
+                    key = line_strip[:line_strip.index(">")]
+                    value = tags[tags.index(line) + 1].strip("\n")
+                    props[key] = value
+                elif line.startswith("> <") and line.strip("\n").endswith(">"):
+                    key = line.strip("\n").strip("> <")
+                    value = tags[tags.index(line) + 1].strip("\n")
+                    props[key] = value
+            if mol.GetConformer().Is3D():
+                mol3d = Chem.AddHs(mol, addCoords=True)
+                sub[i] = {"mol": mol2d, "props": props, "confs": mol3d, "pattern": Chem.MolToSmiles(mol2d)}
+            else:
+                sub[i] = {"mol": mol2d, "props": props}
+        else:
+            failed.append(i)
     return sub, failed
