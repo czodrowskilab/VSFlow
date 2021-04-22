@@ -1,6 +1,6 @@
 from rdkit.Chem import AllChem as Chem
 from rdkit.Chem import Descriptors
-
+import copy
 
 def filter_res(mol, filter_dict):
     filter_func = {"mw": Descriptors.MolWt, "logp": Descriptors.MolLogP, "tpsa": Descriptors.TPSA,
@@ -19,11 +19,12 @@ def filter_res(mol, filter_dict):
 
 def set_attrs_mp(pool_results, mols, key, query, results):
     counter = 0
-    for entry in pool_results:
-        if entry:
-            mols[entry[0]]["props"]["QuerySmiles"] = query[entry[1]]["pattern"]
-            results[counter] = {"mol": mols[entry[0]][key], "props": mols[entry[0]]["props"], "match": entry[2], "q_num": entry[1]}
-            counter += 1
+    sort_res = sorted([entry for entry in pool_results if entry], key=lambda entry: entry[1])
+    for entry in sort_res:
+        props = copy.deepcopy(mols[entry[0]]["props"])
+        props["QuerySmiles"] = query[entry[1]]["pattern"]
+        results[counter] = {"mol": mols[entry[0]][key], "props": props, "match": entry[2], "q_num": entry[1], "num": entry[0]}
+        counter += 1
 
 
 def substruct_mult(mol, i, query_mol, j, filter_dict):
@@ -80,6 +81,7 @@ def sss_fm_taut_mp(query, mols, key, filter_dict, results, pool):
 
 def sss_mp(query, mols, key, filter_dict, results, pool):
     #pool = mp.Pool(processes=np)
+    print("mp")
     argslist = [(mols[i][key], i, query[j]["mol"], j, filter_dict) for i in mols for j in query]
     pool_results = pool.starmap(substruct_mult, argslist)
     set_attrs_mp(pool_results, mols, key, query, results)
@@ -95,19 +97,25 @@ def sss_mp_taut(query, mols, key, filter_dict, results, pool):
 
 
 def sss(query, mols, key, filter_dict, results):
+    print("sss")
     counter = 0
-    for i in mols:
-        mol = mols[i][key]
-        for j in query:
+    # for i in mols:
+    #     mol = mols[i][key]
+    #     for j in query:
+    for j in query:
+        for i in mols:
+            mol = mols[i][key]
             match = mol.GetSubstructMatches(query[j]["mol"])
             if match:
                 filt_mol = filter_res(mol, filter_dict)
                 if filt_mol:
+                    props = copy.deepcopy(mols[i]["props"])
+                    props["QuerySmiles"] = query[j]["pattern"]
                     #set_attrs(mol, query[j][1], j, match)
-                    mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
+                    #mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
                     #mols[i]["props"]["Similarity"] = match
                     #results[i] = (mol, mols[i]["props"])
-                    results[counter] = {"mol": mol, "props": mols[i]["props"], "match": list(match), "q_num": j}
+                    results[counter] = {"mol": mol, "props": props, "match": list(match), "q_num": j, "num": i}
                     counter += 1
 
 
@@ -121,9 +129,13 @@ def sss_taut(query, mols, key, filter_dict, results):
                 if match:
                     filt_mol = filter_res(mol, filter_dict)
                     if filt_mol:
-                        mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
-                        #set_attrs(mol, query[j][1], j, match)
-                        results[counter] = {"mol": mol, "props": mols[i]["props"], "match": list(match), "q_num": j}
+                        props = copy.deepcopy(mols[i]["props"])
+                        props["QuerySmiles"] = query[j]["pattern"]
+                        # set_attrs(mol, query[j][1], j, match)
+                        # mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
+                        # mols[i]["props"]["Similarity"] = match
+                        # results[i] = (mol, mols[i]["props"])
+                        results[counter] = {"mol": mol, "props": props, "match": list(match), "q_num": j, "num": i}
                         counter += 1
                         break
 
@@ -138,10 +150,14 @@ def sss_fm(query, mols, key, filter_dict, results):
                 if mol.GetNumHeavyAtoms() == len(tuple(l for k in match for l in k)):
                     filt_mol = filter_res(mol, filter_dict)
                     if filt_mol:
-                        mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
-                        #set_attrs(mol, query[j][1], j, match)
-                        results[counter] = {"mol": mol, "props": mols[i]["props"], "match": list(match), "q_num": j}
-
+                        props = copy.deepcopy(mols[i]["props"])
+                        props["QuerySmiles"] = query[j]["pattern"]
+                        # set_attrs(mol, query[j][1], j, match)
+                        # mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
+                        # mols[i]["props"]["Similarity"] = match
+                        # results[i] = (mol, mols[i]["props"])
+                        results[counter] = {"mol": mol, "props": props, "match": list(match), "q_num": j, "num": i}
+                        counter += 1
 
 def sss_fm_nost(query, mols, key, filter_dict, results):
     counter = 0
@@ -155,9 +171,14 @@ def sss_fm_nost(query, mols, key, filter_dict, results):
                 if frag_max.GetNumHeavyAtoms() == len(tuple(l for k in match for l in k)):
                     filt_mol = filter_res(mol, filter_dict)
                     if filt_mol:
-                        mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
-                        #set_attrs(mol, query[j][1], j, match)
-                        results[counter] = {"mol": mol, "props": mols[i]["props"], "match": list(match), "q_num": j}
+                        props = copy.deepcopy(mols[i]["props"])
+                        props["QuerySmiles"] = query[j]["pattern"]
+                        # set_attrs(mol, query[j][1], j, match)
+                        # mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
+                        # mols[i]["props"]["Similarity"] = match
+                        # results[i] = (mol, mols[i]["props"])
+                        results[counter] = {"mol": mol, "props": props, "match": list(match), "q_num": j, "num": i}
+                        counter += 1
 
 
 def sss_fm_taut(query, mols, key, filter_dict, results):
@@ -171,8 +192,12 @@ def sss_fm_taut(query, mols, key, filter_dict, results):
                     if mol.GetNumHeavyAtoms() == len(tuple(l for k in match for l in k)):
                         filt_mol = filter_res(mol, filter_dict)
                         if filt_mol:
-                            mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
-                            #set_attrs(mol, query[j][1], j, match)
-                            results[counter] = {"mol": mol, "props": mols[i]["props"], "match": list(match), "q_num": j}
+                            props = copy.deepcopy(mols[i]["props"])
+                            props["QuerySmiles"] = query[j]["pattern"]
+                            # set_attrs(mol, query[j][1], j, match)
+                            # mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
+                            # mols[i]["props"]["Similarity"] = match
+                            # results[i] = (mol, mols[i]["props"])
+                            results[counter] = {"mol": mol, "props": props, "match": list(match), "q_num": j, "num": i}
                             counter += 1
                             break
