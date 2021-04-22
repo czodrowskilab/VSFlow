@@ -180,7 +180,7 @@ def shape_search(mols, query, nthreads, align_method, dist, fp_simi, pharm_def, 
                                                                                     confId=max(shape_simis)[1]))
                     pfp_sim = sim(query[i]["fp_shape"][confid], fp_db, fp_simi, tva, tvb)
                     combo = max_shape_sim + pfp_sim
-                    score.append((combo, max_shape_sim, pfp_sim, i, j, max(shape_simis)[1], mols[j]["confs"], confid, mols[j]["pattern"]))
+                    score.append((combo, max_shape_sim, pfp_sim, i, j, max(shape_simis)[1], Chem.Mol(mols[j]["confs"]), confid, mols[j]["pattern"]))
                     print(counter)
                     counter += 1
     return score
@@ -205,5 +205,5 @@ def shape_mp(db_mol, i, db_smi, query_mol, j, query_fp, confid, nthreads, dist, 
     fp_db = Generate.Gen2DFingerprint(db_mol, feat_factory[pharm_def],
                                           dMat=Chem.Get3DDistanceMatrix(db_mol, confId=max(shape_simis)[1]))
     pfp_sim = sim(fp_q, fp_db, fp_simi, tva, tvb)
-    combo = max_shape_sim + pfp_sim
-    return (combo, max_shape_sim, pfp_sim, j, i, max(shape_simis)[1], db_mol, confid, db_smi)
+    combo = (max_shape_sim + pfp_sim) / 2
+    return (combo, max_shape_sim, pfp_sim, j, i, max(shape_simis)[1], Chem.Mol(db_mol), confid, db_smi)
