@@ -4,7 +4,7 @@ from rdkit.Chem.AtomPairs import Pairs, Torsions
 from rdkit import DataStructs
 from rdkit.Chem import Descriptors
 from itertools import groupby
-
+import copy
 
 sim_dict = {"tan": DataStructs.TanimotoSimilarity, "dice": DataStructs.DiceSimilarity, "cos": DataStructs.CosineSimilarity,
             "sok": DataStructs.SokalSimilarity, "russ": DataStructs.RusselSimilarity, "kulc": DataStructs.KulczynskiSimilarity,
@@ -65,34 +65,79 @@ def fp_torsion(mols, key, nBits, chiral):
 def sim(mols, query, key, cutoff, similarity, filter_dict, name):
     results = {}
     counter = 0
-    for i in mols:
-        for j in query:
+    simis = []
+    for j in query:
+        for i in mols:
+    # for i in mols:
+    #     for j in query:
             sim = sim_dict[similarity](mols[i]["fp"], query[j]["fp"])
             if sim >= cutoff:
                 filt_mol = filter_res(mols[i][key], filter_dict)
                 if filt_mol:
-                    mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
-                    mols[i]["props"]["Fingerprint"] = name
-                    mols[i]["props"][sim_dict_name[similarity]] = round(sim, 5)
-                    results[counter] = {"mol": mols[i][key], "props": mols[i]["props"], "q_num": j}
-                    counter += 1
+                    simis.append((sim, i ,j))
+    print(len(simis))
+    grouped_simis = [sorted(list(group), reverse=True) for k, group in groupby(sorted(simis, key=lambda entry: entry[2]), lambda x: x[2])]
+    print("---")
+    for entry in grouped_simis:
+        for element in entry:
+            props = copy.deepcopy(mols[element[1]]["props"])
+            props["QuerySmiles"] = query[element[2]]["pattern"]
+            props["Fingerprint"] = name
+            props[sim_dict_name[similarity]] = round(element[0], 5)
+            #mols[element[1]]["props"]["QuerySmiles"] = query[element[2]]["pattern"]
+            #mols[element[1]]["props"]["Fingerprint"] = name
+            #mols[element[1]]["props"][sim_dict_name[similarity]] = round(element[0], 5)
+            results[counter] = {"mol": mols[element[1]][key], "props": props, "q_num": element[2]}
+            counter += 1
+                    # props = copy.deepcopy(mols[i]["props"])
+                    # props["QuerySmiles"] = query[j]["pattern"]
+                    # props["Fingerprint"] = name
+                    # props[sim_dict_name[similarity]] = round(sim, 5)
+                    # # mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
+                    # # mols[i]["props"]["Fingerprint"] = name
+                    # # mols[i]["props"][sim_dict_name[similarity]] = round(sim, 5)
+                    # results[counter] = {"mol": mols[i][key], "props": props, "q_num": j}
+                    # counter += 1
     return results
 
 
 def sim_tver(mols, query, key, cutoff, similarity, filter_dict, name, tva, tvb):
     results = {}
     counter = 0
-    for i in mols:
-        for j in query:
+    simis = []
+    for j in query:
+        for i in mols:
+    # for i in mols:
+    #     for j in query:
             sim = sim_dict[similarity](mols[i]["fp"], query[j]["fp"], tva, tvb)
             if sim >= cutoff:
                 filt_mol = filter_res(mols[i][key], filter_dict)
                 if filt_mol:
-                    mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
-                    mols[i]["props"]["Fingerprint"] = name
-                    mols[i]["props"][sim_dict_name[similarity]] = round(sim, 5)
-                    results[counter] = {"mol": mols[i][key], "props": mols[i]["props"], "q_num": j}
-                    counter += 1
+                    simis.append((sim, i, j))
+    print(len(simis))
+    grouped_simis = [sorted(list(group), reverse=True) for k, group in
+                     groupby(sorted(simis, key=lambda entry: entry[2]), lambda x: x[2])]
+    print("---")
+    for entry in grouped_simis:
+        for element in entry:
+            props = copy.deepcopy(mols[element[1]]["props"])
+            props["QuerySmiles"] = query[element[2]]["pattern"]
+            props["Fingerprint"] = name
+            props[sim_dict_name[similarity]] = round(element[0], 5)
+            # mols[element[1]]["props"]["QuerySmiles"] = query[element[2]]["pattern"]
+            # mols[element[1]]["props"]["Fingerprint"] = name
+            # mols[element[1]]["props"][sim_dict_name[similarity]] = round(element[0], 5)
+            results[counter] = {"mol": mols[element[1]][key], "props": props, "q_num": element[2]}
+            counter += 1
+                    # props = copy.deepcopy(mols[i]["props"])
+                    # props["QuerySmiles"] = query[j]["pattern"]
+                    # props["Fingerprint"] = name
+                    # props[sim_dict_name[similarity]] = round(sim, 5)
+                    # # mols[i]["props"]["QuerySmiles"] = query[j]["pattern"]
+                    # # mols[i]["props"]["Fingerprint"] = name
+                    # # mols[i]["props"][sim_dict_name[similarity]] = round(sim, 5)
+                    # results[counter] = {"mol": mols[i][key], "props": props, "q_num": j}
+                    # counter += 1
     return results
 
 
@@ -105,16 +150,24 @@ def sim_top(mols, query, key, top_hits, similarity, filter_dict, name):
             for j in query:
                 sim = sim_dict[similarity](mols[i]["fp"], query[j]["fp"])
                 simis.append((sim, i, j))
-    grouped_simis = [list(group) for k, group in groupby(simis, lambda x: x[2])]
+    print(len(simis))
+    grouped_simis = [list(group) for k, group in groupby(sorted(simis, key=lambda entry: entry[2]), lambda x: x[2])]
+    print(len(grouped_simis))
     counter = 0
     for entry in grouped_simis:
         nearest_hits = sorted(entry, reverse=True)[:top_hits]
+        print(nearest_hits)
         for element in nearest_hits:
-            mols[element[1]]["props"]["QuerySmiles"] = query[element[2]]["pattern"]
-            mols[element[1]]["props"]["Fingerprint"] = name
-            mols[element[1]]["props"][sim_dict_name[similarity]] = round(element[0], 5)
-            results[counter] = {"mol": mols[element[1]][key], "props": mols[element[1]]["props"], "q_num": element[2]}
+            props = copy.deepcopy(mols[element[1]]["props"])
+            props["QuerySmiles"] = query[element[2]]["pattern"]
+            props["Fingerprint"] = name
+            props[sim_dict_name[similarity]] = round(element[0], 5)
+            #mols[element[1]]["props"]["QuerySmiles"] = query[element[2]]["pattern"]
+            #mols[element[1]]["props"]["Fingerprint"] = name
+            #mols[element[1]]["props"][sim_dict_name[similarity]] = round(element[0], 5)
+            results[counter] = {"mol": mols[element[1]][key], "props": props, "q_num": element[2]}
             counter += 1
+    print(results)
     return results
 
 
@@ -127,15 +180,19 @@ def sim_top_tver(mols, query, key, top_hits, similarity, filter_dict, name, tva,
             for j in query:
                 sim = sim_dict[similarity](mols[i]["fp"], query[j]["fp"], tva, tvb)
                 simis.append((sim, i, j))
-    grouped_simis = [list(group) for k, group in groupby(simis, lambda x: x[2])]
+    grouped_simis = [list(group) for k, group in groupby(sorted(simis, key=lambda entry: entry[2]), lambda x: x[2])]
     counter = 0
     for entry in grouped_simis:
         nearest_hits = sorted(entry, reverse=True)[:top_hits]
         for element in nearest_hits:
-            mols[element[1]]["props"]["QuerySmiles"] = query[element[2]]["pattern"]
-            mols[element[1]]["props"]["Fingerprint"] = name
-            mols[element[1]]["props"][sim_dict_name[similarity]] = round(element[0], 5)
-            results[counter] = {"mol": mols[element[1]][key], "props": mols[element[1]]["props"], "q_num": element[2]}
+            props = copy.deepcopy(mols[element[1]]["props"])
+            props["QuerySmiles"] = query[element[2]]["pattern"]
+            props["Fingerprint"] = name
+            props[sim_dict_name[similarity]] = round(element[0], 5)
+            # mols[element[1]]["props"]["QuerySmiles"] = query[element[2]]["pattern"]
+            # mols[element[1]]["props"]["Fingerprint"] = name
+            # mols[element[1]]["props"][sim_dict_name[similarity]] = round(element[0], 5)
+            results[counter] = {"mol": mols[element[1]][key], "props": props, "q_num": element[2]}
             counter += 1
     return results
 
