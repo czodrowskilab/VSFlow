@@ -148,10 +148,10 @@ def gen_pdf_mf(query, results, out_file, ttf_path):
                                 b = results[n]["mol"].GetBondBetweenAtoms(ha1, ha2)
                                 if b:
                                     add_bonds.append(b.GetIdx())
-                    if len(add_bonds) % len(blist) == 0:
-                        for bo2 in add_bonds:
-                            if bo2 not in blist:
-                                blist.append(bo2)
+                    #if len(add_bonds) % len(blist) == 0:
+                    for bo2 in add_bonds:
+                        if bo2 not in blist:
+                            blist.append(bo2)
                     add_colours_to_map(alist, acols, 0, COLOR)
                     add_colours_to_map(blist, bcols, 0, COLOR)
                 except:
@@ -191,10 +191,10 @@ def gen_pdf(query, results, out_file, ttf_path):
                         b = results[i]["mol"].GetBondBetweenAtoms(ha1, ha2)
                         if b:
                             add_bonds.append(b.GetIdx())
-            if len(add_bonds) % len(blist) == 0:
-                for bo2 in add_bonds:
-                    if bo2 not in blist:
-                        blist.append(bo2)
+            #if len(add_bonds) % len(blist) == 0:
+            for bo2 in add_bonds:
+                if bo2 not in blist:
+                    blist.append(bo2)
             add_colours_to_map(alist, acols, 0, COLS)
             add_colours_to_map(blist, bcols, 0, COLS)
         except:
@@ -290,5 +290,6 @@ def export_pymol(file1, file2):
     cmd.delete("query_conf")
     cmd.delete(pref2)
     cmd.save(f"{py_object2}.pse")
+    cmd.delete("all")
 
 
