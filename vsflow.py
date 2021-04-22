@@ -8,6 +8,7 @@ from subprocess import run, PIPE, Popen
 from itertools import groupby
 import pickle
 import random
+import copy
 
 import pandas as pd
 import requests
@@ -167,6 +168,7 @@ substructure.add_argument("--delimiter", help="Specify delimiter of csv file if 
 substructure.add_argument("--header", help="Specify number of row in csv/xlsx file to be used as column names "
                                            "[default: 1, e.g. first row]", type=int, default=1, metavar="")
 substructure.add_argument("--pdf", help="generate a pdf file for all results", action="store_true")
+substructure.add_argument("--combine", action="store_true")
 
 
 def check_filter(filter_list):
@@ -367,6 +369,26 @@ def substruct(args):
     # write results to output file(s)
     print(f"{len(results)} matches found")
     print("Generating output file(s) ...")
+    if args.combine:
+        if args.smiles or args.smarts:
+            if args.smiles:
+                npatts = len(args.smiles)
+            else:
+                npatts = len(args.smarts)
+            if npatts > 1:
+                print("and")
+                gr_res = [list(group) for k, group in groupby(sorted(results.values(), key=lambda entry: entry["num"]),
+                                                              key=lambda entry: entry["num"])]
+                counter = 0
+                results = {}
+                for entry in gr_res:
+                    if len(entry) == npatts:
+                        for i in range(1, len(entry)):
+                            for match in entry[i]["match"]:
+                                entry[0]["match"].append(match)
+                            entry[0]['props']['QuerySmiles'] = f"{entry[0]['props']['QuerySmiles']} and {entry[i]['props']['QuerySmiles']}"
+                        results[counter] = entry[0]
+                        counter += 1
     if args.multfile:
         if results:
             if args.output.endswith(".csv"):
@@ -829,10 +851,6 @@ def shape(args):
                 query[entry[0]]["fp_shape"] = entry[2]
             del query_confs
             print(query)
-        # algs = pool_shape.starmap(shapesearch.shape_tani_mp, [(mols[i]["confs"], i, query[j]["confs"], j,
-        #                                                        query[j]["fp_shape"], k, nthreads) for i in mols for j
-        #                                                       in query for k in
-        #                                                       range(query[j]["confs"].GetNumConformers())])
         algs = pool_shape.starmap(shapesearch.shape_mp, [(mols[i]["confs"], i, mols[i]["pattern"], query[j]["confs"], j,
                                                                query[j]["fp_shape"], k, nthreads, args.shape_simi, args.fp_simi, args.tver_alpha, args.tver_beta, args.align_method, args.pharm_feats) for i in mols for j
                                                               in query for k in
@@ -842,15 +860,8 @@ def shape(args):
         shapesearch.gen_query_conf_pfp(query, args.nconfs, seed, args.keep_confs, nthreads, args.align_method, args.pharm_feats)
         algs = shapesearch.shape_search(mols, query, nthreads, args.align_method, args.shape_simi, args.fp_simi, args.pharm_feats, args.tver_alpha, args.tver_beta)
     # sort results
-    grouped_algs = [res for res in (list(group) for k, group in groupby(algs, lambda x: x[3]))]
+    grouped_algs = [res for res in (list(group) for k, group in groupby(sorted(algs, key=lambda entry: entry[3]), lambda x: x[3]))]
     grouped = []
-    # if from_sd:
-    #     sort_key = 8
-    #     for res in grouped_algs:
-    #         for entry in res:
-    #             entry.append(mols[entry[4]]["pattern"])
-    # else:
-    #     sort_key = 4
     if args.score == "combo":
         sort_score = 0
     else:
@@ -871,35 +882,16 @@ def shape(args):
             print(gr_res)
             print(len(gr_res))
             grouped.append(gr_res)
-    # else:
-    #     if args.cutoff:
-    #         for res in grouped_algs:
-    #             gr = sorted([max(conf) for conf in (list(group) for k, group in groupby(res, lambda x: x[sort_key]))],
-    #                         reverse=True)
-    #             print(gr)
-    #             gr_res = [entry for entry in gr if entry[1] >= args.cutoff]
-    #     else:
-    #         gr_res = sorted([max(conf, key=lambda entry: entry[1]) for conf in (list(group) for k, group in groupby(res, lambda x: x[8]))],
-    #                         reverse=True)[:args.top_hits]
-    # grouped.append(gr_res)
-    # else:
-    #     for res in grouped_algs:
-    #         if args.score == "combo":
-    #             gr_res = sorted([max(conf) for conf in (list(group) for k, group in groupby(res, lambda x: x[4]))],
-    #                             reverse=True)[:args.top_hits]
-    #         else:
-    #             gr_res = sorted([max(conf, key=lambda entry: entry[1]) for conf in (list(group) for k, group in groupby(res, lambda x: x[4]))],
-    #                             reverse=True)[:args.top_hits]
-    #         grouped.append(gr_res)
     results = {}
     counter = 0
     for entry in grouped:
         for feat in entry:
-            mols[feat[4]]["props"]["Combo_Score"] = feat[0]
-            mols[feat[4]]["props"]["Shape_Similarity"] = feat[1]
-            mols[feat[4]]["props"]["3D_FP_Similarity"] = feat[2]
-            mols[feat[4]]["props"]["QuerySmiles"] = query[feat[3]]["pattern"]
-            results[counter] = {"mol": feat[6], "props": mols[feat[4]]["props"], "top_conf": feat[5],
+            props = copy.deepcopy(mols[feat[4]]["props"])
+            props["Combo_Score"] = feat[0]
+            props["Shape_Similarity"] = feat[1]
+            props["3D_FP_Similarity"] = feat[2]
+            props["QuerySmiles"] = query[feat[3]]["pattern"]
+            results[counter] = {"mol": feat[6], "props": props, "top_conf": feat[5],
                                 "q_num": feat[3]}
             counter += 1
     print(results)
@@ -927,21 +919,20 @@ shape_sim.set_defaults(func=shape)
 ## prepare databases for screening
 
 canon = subparsers.add_parser("preparedb")
-canon.add_argument("-i", "--input", required=True, help="specify path of input file [sdf, csv, xlsx]", metavar="")
+canon.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx] (required)", required=True, metavar="infile")
 canon.add_argument("-o", "--output", default="prep_database.vsdb", help="specify name of output file [default: prep_database.vsdb]",
                    metavar="")
 canon.add_argument("-int", "--integrate", help="specify shortcut for database; saves database to $HOME/VSFlow_Databases", metavar="")
 canon.add_argument("-intg", "--int_global", help="stores database in {path_to_script}/Databases instead of $HOME/VSFlow_Databases, "
                                                  "can only be specified together with --integrate flag",
                    action="store_true")
-canon.add_argument("--max_tauts", help="maximum number of tautomers to be enumerated during standardization process",
-                   type=int, default=100, metavar="")
-canon.add_argument("-np", "--nproc", type=int, help="Specify the number of processors to run the application in "
-                                                    "multiprocessing mode", metavar="")
 canon.add_argument("-s", "--standardize", help="standardizes molecules, removes salts and associated charges",
                    action="store_true")
 canon.add_argument("-c", "--conformers", help="generates multiple 3D conformers, required for mode shape",
                    action="store_true")
+canon.add_argument("-np", "--nproc", type=int, help="specify number of processors to run application in multiprocessing mode", metavar="")
+canon.add_argument("--max_tauts", help="maximum number of tautomers to be enumerated during standardization process",
+                   type=int, default=100, metavar="")
 canon.add_argument("--nconfs", help="maximal number of conformers generated", type=int, default=20, metavar="")
 canon.add_argument("--rms_thresh", help="if specified, only those conformations out of nconfs that are at least "
                                         "this different are retained (RMSD calculated on heavy atoms)", type=float,
