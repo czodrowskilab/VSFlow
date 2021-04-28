@@ -8,6 +8,8 @@ from rdkit.Chem.Draw import SimilarityMaps
 from pymol import cmd
 import fpsearch
 
+script_path = os.path.dirname(os.path.abspath(__file__))
+ttf_path = f"{script_path}/resources/DejaVuSansMono.ttf"
 
 def add_colours_to_map(els, cols, col_num, COLS):
     for el in els:
@@ -51,7 +53,7 @@ def write_props(pdf, props_list, txt_place_y, txt_space_y, size):
                 txt_space_y = txt_space_y + str_space
 
 
-def gen_pdf_pages(mol_keys, results, ttf_path):
+def gen_pdf_pages(mol_keys, results):
     sort_pages = [mol_keys[i * 3:(i + 1) * 3] for i in range((len(mol_keys) + 3 - 1) // 3)]
     counter = 1
     pages = []
@@ -120,7 +122,7 @@ def export_pdf(pages, out_file):
         pdf_writer.write(file)
 
 
-def gen_pdf_mf(query, results, out_file, ttf_path):
+def gen_pdf_mf(query, results, out_file):
     COLOR = [(0.8, 0.0, 0.0)]
     file_counter = 1
     for m in query:
@@ -161,12 +163,12 @@ def gen_pdf_mf(query, results, out_file, ttf_path):
                 d.FinishDrawing()
                 d.WriteDrawingText(f"{n}.png")
                 mol_keys.append(n)
-        pages = gen_pdf_pages(mol_keys, results, ttf_path)
+        pages = gen_pdf_pages(mol_keys, results)
         export_pdf(pages, f"{out_file}_{file_counter}.pdf")
         file_counter += 1
 
 
-def gen_pdf(query, results, out_file, ttf_path):
+def gen_pdf(query, results, out_file):
     for i in results:
         COLS = [(0.8, 0.0, 0.0), (0.0, 0.8, 0.0),
                 (0.0, 0.0, 0.8), (1.0, 0.55, 1.0)]
@@ -203,11 +205,11 @@ def gen_pdf(query, results, out_file, ttf_path):
         d.DrawMoleculeWithHighlights(results[i]["mol"], "", acols, bcols, h_rads, h_lw_mult, -1)
         d.FinishDrawing()
         d.WriteDrawingText(f"{i}.png")
-    pages = gen_pdf_pages(list(results.keys()), results, ttf_path)
+    pages = gen_pdf_pages(list(results.keys()), results)
     export_pdf(pages, out_file)
 
 
-def gen_pdf_shape(query, results, out_file, ttf_path):
+def gen_pdf_shape(query, results, out_file):
     for m in query:
         mol_keys = []
         for n in results:
@@ -223,11 +225,11 @@ def gen_pdf_shape(query, results, out_file, ttf_path):
                 d.FinishDrawing()
                 d.WriteDrawingText(f"{n}.png")
                 mol_keys.append(n)
-        pages = gen_pdf_pages(mol_keys, results, ttf_path)
+        pages = gen_pdf_pages(mol_keys, results)
         export_pdf(pages, f"{out_file}_{m + 1}.pdf")
 
 
-def sim_map(results, query, fp_func, metric, out_file, ttf_path):
+def sim_map(results, query, fp_func, metric, out_file):
     for i in results:
         fig, maxweight = SimilarityMaps.GetSimilarityMapForFingerprint(query[results[i]["q_num"]]["mol"], results[i]["mol"],
                                                                        fp_func, metric=fpsearch.sim_dict[metric])
@@ -235,11 +237,11 @@ def sim_map(results, query, fp_func, metric, out_file, ttf_path):
         fig.set_figheight(3.255)
         filename = f"{i}.png"
         fig.savefig(filename, bbox_inches="tight")
-    pages = gen_pdf_pages(list(results.keys()), results, ttf_path)
+    pages = gen_pdf_pages(list(results.keys()), results)
     export_pdf(pages, out_file)
 
 
-def sim_map_mf(results, query, fp_func, metric, out_file, ttf_path):
+def sim_map_mf(results, query, fp_func, metric, out_file):
     file_counter = 1
     for m in query:
         mol_keys = []
@@ -254,12 +256,12 @@ def sim_map_mf(results, query, fp_func, metric, out_file, ttf_path):
                 filename = f"{i}.png"
                 fig.savefig(filename, bbox_inches="tight")
                 mol_keys.append(i)
-        pages = gen_pdf_pages(mol_keys, results, ttf_path)
+        pages = gen_pdf_pages(mol_keys, results)
         export_pdf(pages, f"{out_file}_{file_counter}.pdf")
         file_counter += 1
 
 
-def fp_maps(results, query, fingerprint, fpradius, nbits, features, metric, out_file, ttf_path, multfile):
+def fp_maps(results, query, fingerprint, fpradius, nbits, features, metric, out_file, multfile):
     if fingerprint == "ecfp" or fingerprint == "fcfp":
         fp_func = lambda m, idx: SimilarityMaps.GetMorganFingerprint(m, atomId=idx, radius=fpradius,
                                                                      fpType='bv', nBits=nbits,
@@ -272,9 +274,9 @@ def fp_maps(results, query, fingerprint, fpradius, nbits, features, metric, out_
         #fingerprint == "tt":
         fp_func = lambda m, idx: SimilarityMaps.GetTTFingerprint(m, atomId=idx, fpType="bv", nBits=nbits)
     if multfile:
-        sim_map_mf(results, query, fp_func, metric, out_file, ttf_path)
+        sim_map_mf(results, query, fp_func, metric, out_file)
     else:
-        sim_map(results, query, fp_func, metric, out_file, ttf_path)
+        sim_map(results, query, fp_func, metric, out_file)
 
 
 def export_pymol(file1, file2):
