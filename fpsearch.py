@@ -34,7 +34,7 @@ def fp_rdkit(mols, key, nBits):
     for i in mols:
         fp = Chem.RDKFingerprint(mols[i][key], fpSize=nBits)
         mols[i]["fp"] = fp
-        mols[i]["props"]["Fingerprint"] = "RDKit"
+        #mols[i]["props"]["Fingerprint"] = "RDKit"
 
 
 def fp_morgan(mols, key, radius, nBits, features, chiral):
