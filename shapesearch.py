@@ -3,7 +3,9 @@ from rdkit.Chem import AllChem as Chem
 from rdkit.Chem import rdMolDescriptors
 from rdkit.Chem.Pharm2D import Gobbi_Pharm2D, Generate, SigFactory
 from rdkit.Chem import ChemicalFeatures
+import os
 
+script_path = os.path.dirname(os.path.abspath(__file__))
 
 def init_sig(fdefName):
     featFactory = ChemicalFeatures.BuildFeatureFactory(fdefName)
@@ -24,7 +26,8 @@ sim_measures = {"tan": DataStructs.TanimotoSimilarity, "dice": DataStructs.DiceS
                 "sok": DataStructs.SokalSimilarity, "russ": DataStructs.RusselSimilarity,
                 "kulc": DataStructs.KulczynskiSimilarity,
                 "mcco": DataStructs.McConnaugheySimilarity}
-feat_factory = {"gobbi": Gobbi_Pharm2D.factory, "base": init_sig('resources/BaseFeatures.fdef'), "minimal": init_sig('resources/MinimalFeatures.fdef')}
+feat_factory = {"gobbi": Gobbi_Pharm2D.factory, "basic": init_sig(f'{script_path}/resources/BaseFeatures.fdef'),
+                "minimal": init_sig(f'{script_path}/resources/MinimalFeatures.fdef')}
 
 
 def sim(fp1, fp2, simi, tver_a=0.5, tver_b=0.5):
@@ -127,21 +130,21 @@ def gen_query_conf_pfp_mp(mol, i, num_confs, seed, max_confs, nthreads, pharm_de
                 mol_conf.AddConformer(mol_H.GetConformer(k), assignId=True)
         else:
             mol_conf = mol_H
-    fp_mol = []
-    for k in range(mol_conf.GetNumConformers()):
-        fp = Generate.Gen2DFingerprint(mol_conf, feat_factory[pharm_def], dMat=Chem.Get3DDistanceMatrix(mol_conf, confId=k))
-        fp_mol.append(fp)
+    # fp_mol = []
+    # for k in range(mol_conf.GetNumConformers()):
+    #     fp = Generate.Gen2DFingerprint(mol_conf, feat_factory[pharm_def], dMat=Chem.Get3DDistanceMatrix(mol_conf, confId=k))
+    #     fp_mol.append(fp)
     #fp_mol = Generate.Gen2DFingerprint(mol_H, factory, dMat=Chem.Get3DDistanceMatrix(mol_H, confId=0))
-    return (i, mol_conf, fp_mol)
+    return (i, mol_conf)
 
 
 def gen_query_pfp_mp(mol, i, pharm_def):
     mol_H = Chem.AddHs(mol, addCoords=True)
-    print("start1")
-    fp_mol = Generate.Gen2DFingerprint(mol_H, feat_factory[pharm_def], dMat=Chem.Get3DDistanceMatrix(mol_H, confId=0))
-    print("end1")
-    fp_mol = [fp_mol]
-    return (i, mol_H, fp_mol)
+    # print("start1")
+    # fp_mol = Generate.Gen2DFingerprint(mol_H, feat_factory[pharm_def], dMat=Chem.Get3DDistanceMatrix(mol_H, confId=-1))
+    # print("end1")
+    # fp_mol = [fp_mol]
+    return (i, mol_H)
 
 
 ### perform shape screening depending on selected parameters
@@ -152,58 +155,78 @@ def shape_search(mols, query, nthreads, align_method, dist, fp_simi, pharm_def, 
     score = []
     for j in mols:
         if "confs" in mols[j]:
-            db_mol_params = align_contribs[align_method](mols[j]["confs"])
+            try:
+                db_mol_params = align_contribs[align_method](mols[j]["confs"])
+            except:
+                db_mol_params = None
+                pass
             for i in query:
                 for confid in range(query[i]["confs"].GetNumConformers()):
                     # algns = Chem.GetO3AForProbeConfs(mols[j]["confs"], query[i]["confs"],
                     #                                        prbPyMMFFMolProperties=db_mol_params,
                     #                                        refPyMMFFMolProperties=query[i]["param"], refCid=confid,
                     #                                        numThreads=nthreads)
-                    algns = mol_align[align_method](mols[j]["confs"], query[i]["confs"], nthreads,
-                                                    db_mol_params,
-                                                    query[i]["param"],
-                                                    refCid=confid)
-                    shape_simis = []
-                    if dist == "tver":
-                        for k in range(len(algns)):
-                            algns[k].Align()
-                            shape_simis.append(
-                                (Chem.ShapeTverskyIndex(mols[j]["confs"], query[i]["confs"], tva, tvb, confId1=k, confId2=confid), k))
-                    else:
-                        for k in range(len(algns)):
-                            algns[k].Align()
-                            shape_simis.append((1 - shape_dist[dist](mols[j]["confs"], query[i]["confs"], confId1=k,
-                                                                           confId2=confid), k))
-                    max_shape_sim = max(shape_simis)[0]
-                    fp_db = Generate.Gen2DFingerprint(mols[j]["confs"], feat_factory[pharm_def],
-                                                      dMat=Chem.Get3DDistanceMatrix(mols[j]["confs"],
-                                                                                    confId=max(shape_simis)[1]))
-                    pfp_sim = sim(query[i]["fp_shape"][confid], fp_db, fp_simi, tva, tvb)
-                    combo = max_shape_sim + pfp_sim
-                    score.append((combo, max_shape_sim, pfp_sim, i, j, max(shape_simis)[1], Chem.Mol(mols[j]["confs"]), confid, mols[j]["pattern"]))
-                    print(counter)
-                    counter += 1
+                    try:
+                        algns = mol_align[align_method](mols[j]["confs"], query[i]["confs"], nthreads,
+                                                        db_mol_params,
+                                                        query[i]["param"],
+                                                        refCid=confid)
+                    except:
+                        algns = []
+                    if algns:
+                        shape_simis = []
+                        if dist == "tver":
+                            for k in range(len(algns)):
+                                algns[k].Align()
+                                shape_simis.append(
+                                    (Chem.ShapeTverskyIndex(mols[j]["confs"], query[i]["confs"], tva, tvb, confId1=k, confId2=confid), k))
+                        else:
+                            for k in range(len(algns)):
+                                algns[k].Align()
+                                shape_simis.append((1 - shape_dist[dist](mols[j]["confs"], query[i]["confs"], confId1=k,
+                                                                               confId2=confid), k))
+                        max_shape_sim = max(shape_simis)[0]
+                        fp_db = Generate.Gen2DFingerprint(mols[j]["confs"], feat_factory[pharm_def],
+                                                          dMat=Chem.Get3DDistanceMatrix(mols[j]["confs"],
+                                                                                        confId=max(shape_simis)[1]))
+                        pfp_sim = sim(query[i]["fp_shape"][confid], fp_db, fp_simi, tva, tvb)
+                        combo = (max_shape_sim + pfp_sim) / 2
+                        score.append((combo, max_shape_sim, pfp_sim, i, j, max(shape_simis)[1], Chem.Mol(mols[j]["confs"]), confid, mols[j]["pattern"]))
+                        print(counter)
+                        counter += 1
     return score
 
 
-def shape_mp(db_mol, i, db_smi, query_mol, j, query_fp, confid, nthreads, dist, fp_simi, tva, tvb, align_method, pharm_def):
-    fp_q = query_fp[confid]
-    algns = mol_align[align_method](db_mol, query_mol, nthreads,
-                                           align_contribs[align_method](db_mol),
-                                           align_contribs[align_method](query_mol),
-                                           refCid=confid)
-    shape_simis = []
-    if dist == "tver":
-        for k in range(len(algns)):
-            algns[k].Align()
-            shape_simis.append((Chem.ShapeTverskyIndex(db_mol, query_mol, tva, tvb, confId1=k, confId2=confid), k))
-    else:
-        for k in range(len(algns)):
-            algns[k].Align()
-            shape_simis.append((1 - shape_dist[dist](db_mol, query_mol, confId1=k, confId2=confid), k))
-    max_shape_sim = max(shape_simis)[0]
-    fp_db = Generate.Gen2DFingerprint(db_mol, feat_factory[pharm_def],
-                                          dMat=Chem.Get3DDistanceMatrix(db_mol, confId=max(shape_simis)[1]))
-    pfp_sim = sim(fp_q, fp_db, fp_simi, tva, tvb)
-    combo = (max_shape_sim + pfp_sim) / 2
-    return (combo, max_shape_sim, pfp_sim, j, i, max(shape_simis)[1], Chem.Mol(db_mol), confid, db_smi)
+def shape_mp(db_mol, i, db_smi, query_mol, j, confid, nthreads, dist, fp_simi, tva, tvb, align_method, pharm_def):
+    #fp_q = query_fp[confid]
+    fp_q = Generate.Gen2DFingerprint(query_mol, feat_factory[pharm_def],
+                              dMat=Chem.Get3DDistanceMatrix(query_mol, confId=confid))
+    try:
+        algns = mol_align[align_method](db_mol, query_mol, nthreads,
+                                               align_contribs[align_method](db_mol),
+                                               align_contribs[align_method](query_mol),
+                                               refCid=confid)
+    except:
+        algns = []
+    if algns:
+        shape_simis = []
+        if dist == "tver":
+            for k in range(len(algns)):
+                algns[k].Align()
+                shape_simis.append((Chem.ShapeTverskyIndex(db_mol, query_mol, tva, tvb, confId1=k, confId2=confid), k))
+        else:
+            for k in range(len(algns)):
+                algns[k].Align()
+                shape_simis.append((1 - shape_dist[dist](db_mol, query_mol, confId1=k, confId2=confid), k))
+
+        max_shape_sim = max(shape_simis)[0]
+        # mol = Chem.Mol(db_mol)
+        # mol.RemoveAllConformers()
+        # mol.AddConformer(db_mol.GetConformer(max(shape_simis)[1]))
+        # fp_db = Generate.Gen2DFingerprint(mol, feat_factory[pharm_def],
+        #                                       dMat=Chem.Get3DDistanceMatrix(mol, confId=-1))
+        fp_db = Generate.Gen2DFingerprint(db_mol, feat_factory[pharm_def],
+                                              dMat=Chem.Get3DDistanceMatrix(db_mol, confId=max(shape_simis)[1]))
+        pfp_sim = sim(fp_q, fp_db, fp_simi, tva, tvb)
+        combo = (max_shape_sim + pfp_sim) / 2
+        return (combo, max_shape_sim, pfp_sim, j, i, max(shape_simis)[1], Chem.Mol(db_mol), confid, db_smi)
