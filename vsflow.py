@@ -1,55 +1,35 @@
+#!/usr/bin/env python
 import argparse
-import csv
-import math
+import copy
 import multiprocessing as mp
 import os
-import time
-from subprocess import run, PIPE, Popen
-from itertools import groupby
 import pickle
 import random
-import copy
+import time
+from itertools import groupby
 
-import pandas as pd
-import requests
-import xlsxwriter
-#from bs4 import BeautifulSoup
-from fpdf import FPDF, set_global
-#from pdfrw import PdfReader
-#from pdfrw import PdfWriter
-from pymol import cmd
-from rdkit import Chem
-from rdkit import DataStructs
-from rdkit import RDLogger
-from rdkit.Chem import AllChem as Chem
-from rdkit.Chem import Descriptors
-from rdkit.Chem import Draw, MACCSkeys
-from rdkit.Chem.AtomPairs import Pairs, Torsions
-from rdkit.Chem.Draw import SimilarityMaps
-from molvs.tautomer import TautomerCanonicalizer, TautomerEnumerator
-from molvs.standardize import Standardizer
 import matplotlib as mpl
-from rdkit.Chem import rdMolAlign
-from rdkit.Chem.Pharm2D import Gobbi_Pharm2D, Generate
-from xlrd import open_workbook
+from fpdf import set_global
+from rdkit import RDLogger
+from rdkit.Chem import Descriptors
+
+import fpsearch
+import prepare
+import read
+import shapesearch
+import sss
+import visualize
+import write_output
+
 mpl.rc('figure', max_open_warning=0)
 RDLogger.logger().setLevel(RDLogger.CRITICAL)
-import visualize
-import sss
-import read
-import write_output
-import fpsearch
-import  shapesearch
-import prepare
-from rdkit.Chem.Draw import rdMolDraw2D
-
 
 # set path and global variables
 script_path = os.path.dirname(os.path.abspath(__file__))
 home = os.path.expanduser("~")
 #database_path = f"{home}/.vsflow/DATABASES.csv"
 #database_global = f"{script_path}/DATABASES.csv"
-ttf_path = f"{script_path}/resources/DejaVuSansMono.ttf"
+#ttf_path = f"{script_path}/resources/DejaVuSansMono.ttf"
 set_global("FPDF_CACHE_MODE", 2)
 set_global("FPDF_CACHE_DIR", script_path)
 
@@ -60,7 +40,7 @@ if os.path.exists(f"{home}/.vsflow"):
     db_default = pickle.load(open(f"{home}/.vsflow/.db_default", "rb"))
 else:
     os.mkdir(f"{home}/.vsflow")
-    config = {"global_db": f"{script_path}/DATABASES", "local_db": f"{home}/VSFlow_Databases"}
+    config = {"global_db": f"{script_path}/Databases", "local_db": f"{home}/VSFlow_Databases"}
     db_config = {}
     db_default = ""
 print(db_config)
@@ -128,7 +108,7 @@ print('''\
 
 **************************
 ''')
-subparsers = parser.add_subparsers(title="mode", help="specify mode of vsflow")
+subparsers = parser.add_subparsers(title="mode", help="specify mode of VSFlow {substructure, fpsim, shape, preparedb, managedb}", metavar="MODE")
 
 # substructure search
 
@@ -165,17 +145,18 @@ substructure.add_argument("--mol_column",
                                "automatically recognized", metavar="")
 substructure.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized",
                           metavar="")
-substructure.add_argument("--header", help="Specify number of row in csv/xlsx file to be used as column names "
-                                           "[default: 1, e.g. first row]", type=int, default=1, metavar="")
+# substructure.add_argument("--header", help="Specify number of row in csv/xlsx file to be used as column names "
+#                                            "[default: 1, e.g. first row]", type=int, default=1, metavar="")
 substructure.add_argument("--pdf", help="generate a pdf file for all results", action="store_true")
-substructure.add_argument("--combine", action="store_true")
+substructure.add_argument("--combine", help="if specified, multiple arguments provided via -smi or -sma are combined to one query",
+                          action="store_true")
 
 
 def check_filter(filter_list):
     choices = ["mw", "logp",
-               "hdon",
-               "hacc", "rotb",
-               "narom", "nhet",
+               "nhdo",
+               "nhac", "nrob",
+               "naro", "nhet",
                "tpsa"]
     filter_dict = {}
     for prop in choices:
@@ -183,7 +164,7 @@ def check_filter(filter_list):
             if prop in entry:
                 if entry.startswith(prop):
                     try:
-                        x = float(entry.split(prop)[1])
+                        x = float(entry.split("_")[1])
                         filter_dict[prop] = x
                     except ValueError:
                         parser.error(message=f"Filter {entry} not supported")
@@ -225,11 +206,17 @@ def read_database(args):
                 if args.nproc:
                     print("here")
                     pool = mp.Pool(processes=args.nproc)
-                    mols, failed = read.read_sd_mp(args.database, pool)
+                    if args.database.endswith(".sdf"):
+                        mols, failed = read.read_sd_mp(args.database, pool)
+                    else:
+                        mols, failed = read.read_sd_mp(args.database, pool, gz=True)
                     pool.close()
 
                 else:
-                    mols, failed = read.read_db_from_sd(args.database)
+                    if args.database.endswith(".sdf"):
+                        mols, failed = read.read_db_from_sd(args.database)
+                    else:
+                        mols, failed = read.read_db_from_sd(args.database, mode="gz")
                 if failed:
                     print(f"{len(failed)} of {len(mols) + len(failed)} molecules in {args.database} could not be processed")
                 if not mols:
@@ -403,7 +390,7 @@ def substruct(args):
                     out_file = args.output.rsplit(".", maxsplit=1)[0]
                 else:
                     out_file = args.output
-                visualize.gen_pdf_mf(query, results, out_file, ttf_path)
+                visualize.gen_pdf_mf(query, results, out_file)
     else:
         if results:
             if args.output.endswith(".csv") or args.output.endswith(".xlsx") or args.output.endswith(".xls"):
@@ -417,7 +404,7 @@ def substruct(args):
                     out_file = f"{args.output.rsplit('.', maxsplit=1)[0]}.pdf"
                 else:
                     out_file = f"{args.output}.pdf"
-                visualize.gen_pdf(query, results, out_file, ttf_path)
+                visualize.gen_pdf(query, results, out_file)
     end_time = time.time()
     print(f"Finished: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     duration = round(end_time - start_time, 5)
@@ -467,8 +454,8 @@ fp_sim.add_argument("--filter", help="specify property to filter screening resul
 fp_sim.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
                                          "not automatically recognized", metavar="")
 fp_sim.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
-fp_sim.add_argument("--header", help="Specify number of row in csv/xlsx file to be used as column names "
-                                     "[default: 1, e.g. first row]", type=int, default=1, metavar="")
+# fp_sim.add_argument("--header", help="Specify number of row in csv/xlsx file to be used as column names "
+#                                      "[default: 1, e.g. first row]", type=int, default=1, metavar="")
 fp_sim.add_argument("--pdf", help="generate a pdf file for all results", action="store_true")
 fp_sim.add_argument("--simmap", help="generates similarity maps for supported fingerprints in pdf file",
                     action="store_true")
@@ -666,9 +653,9 @@ def fingerprint(args):
                 if args.simmap:
                     print(f"Calculating similarity maps for {len(results)} matches ...")
                     visualize.fp_maps(results, query, args.fingerprint, args.radius, args.nbits, features,
-                                      args.similarity, out_file, ttf_path, args.multfile)
+                                      args.similarity, out_file, args.multfile)
                 else:
-                    visualize.gen_pdf_mf(query, results, out_file, ttf_path)
+                    visualize.gen_pdf_mf(query, results, out_file)
     else:
         if results:
             if args.output.endswith(".csv") or args.output.endswith(".xlsx") or args.output.endswith(".xls"):
@@ -685,16 +672,16 @@ def fingerprint(args):
                 if args.simmap:
                     if args.fingerprint == "MACCS":
                         print("For MACCS keys no similarity map can be computed")
-                        visualize.gen_pdf(query, results, out_file, ttf_path)
+                        visualize.gen_pdf(query, results, out_file)
                     elif args.similarity == "tver":
                         print("For Tversky Similarity no similarity map can be computed")
-                        visualize.gen_pdf(query, results, out_file, ttf_path)
+                        visualize.gen_pdf(query, results, out_file)
                     else:
                         print(f"Calculating similarity maps for {len(results)} matches ...")
                         visualize.fp_maps(results, query, args.fingerprint, args.radius, args.nbits, features,
-                                          args.similarity, out_file, ttf_path, args.multfile)
+                                          args.similarity, out_file, args.multfile)
                 else:
-                    visualize.gen_pdf(query, results, out_file, ttf_path)
+                    visualize.gen_pdf(query, results, out_file)
     end_time = time.time()
     print(f"Finished: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     duration = round(end_time - start_time, 5)
@@ -721,7 +708,7 @@ shape_sim.add_argument("-t", "--top_hits", default=10, type=int, help="Maximum n
                                                                       "score to keep [default: 10]", metavar="")
 shape_sim.add_argument("-a", "--align_method", choices=["mmff", "crippen"], default="mmff",
                        help="select method for molecular alignment [mmff, crippen], [default: mmff]", metavar="")
-shape_sim.add_argument("-s", "--score", choices=["combo", "shapeonly"], default="combo",
+shape_sim.add_argument("-s", "--score", choices=["combo", "shape", "pharmacophore"], default="combo",
                        help="select score to be used to rank the results", metavar="")
 shape_sim.add_argument("-c", "--cutoff", type=float,
                        help="if specified, all molecules with score above cutoff are kept", metavar="")
@@ -734,7 +721,7 @@ shape_sim.add_argument("--nconfs", default=100, type=int,
 shape_sim.add_argument("--boost", action="store_true",
                        help="distributes query conformer generation and 3D alignment on all available threads of "
                             "your cpu")
-shape_sim.add_argument("--pharm_feats", choices=["gobbi", "base", "minimal"], default="gobbi",
+shape_sim.add_argument("--pharm_feats", choices=["gobbi", "basic", "minimal"], default="gobbi",
                        help="select pharmacophore feature definitions to be used for calculation of 3D fps. "
                             "[default: 'gobbi']", metavar="")
 shape_sim.add_argument("--shape_simi", choices=["tan", "protr", "tver"], default="tan",
@@ -750,6 +737,9 @@ shape_sim.add_argument("--tver_beta", help="specify beta parameter (weighs query
                                            "[default: 0.5]", default=0.5, type=float, metavar="")
 shape_sim.add_argument("--pdf", action="store_true", help="generate a pdf file for all results")
 shape_sim.add_argument("--pymol", action="store_true", help="generate PyMOL file with 3D conformations for results")
+shape_sim.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
+                                         "not automatically recognized", metavar="")
+shape_sim.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
 
 
 def shape(args):
@@ -794,6 +784,10 @@ def shape(args):
                 mols, _ = read.read_db_from_sd_3d(args.database)
                 if not mols:
                     parser.exit(status=2, message="No molecules with 3D coordinates could be read from SD file !")
+            elif args.database.endswith(".sdf.gz"):
+                mols, _ = read.read_db_from_sd_3d(args.database, mode="gz")
+                if not mols:
+                    parser.exit(status=2, message="No molecules with 3D coordinates could be read from SD file !")
             else:
                 parser.error(message="Database must have format .vsdb or .sdf. Use mode preparedb to prepare a database for"
                                      " shape similarity screening.")
@@ -802,85 +796,89 @@ def shape(args):
                                  f"Please make sure you specified the correct path")
     try:
         db_desc = mols.pop("config")
-        # if db_desc[1] == 0:
-        #     parser.error(message=f"Database {args.database} does not contain conformers. Use mode preparedb to generate "
-        #                          f"conformers and prepare a database for shape similarity screening")
-
         seed = db_desc[3]
         if seed is None:
             if args.seed:
                 seed = args.seed
             else:
                 seed = random.randint(1, 10000)
-        # num_confs = db_desc[1]
     except KeyError:
         if args.seed:
             seed = args.seed
         else:
             seed = random.randint(1, 10000)
-        # num_confs = 100
     # read query
     if args.smiles:
-        query = read.read_smiles_std(args.smiles)
+        query = read.read_smiles(args.smiles, mode="std", ntauts=None)
     else:
-        query = read.read_sd_3d(args.input)
-        print(query)
+        if args.input.endswith(".sdf"):
+            query = read.read_sd(args.input, mode="std", ntauts=None)
+        elif args.input.endswith(".csv"):
+            query = read.read_csv(args.input, args.mol_column, args.delimiter, mode="std", ntauts=None)
+        else:
+            query = read.read_excel(args.input, args.mol_column, mode="std", ntauts=None)
+    if not query:
+        parser.exit(status=2, message="No molecules could be read from input file")
+    print(query)
     # perform shape screening with specified parameters
+    search_start = time.time()
     if args.nproc:
         pool_shape = mp.Pool(processes=args.nproc)
         if args.smiles:
             mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query]
             mol3d_list = []
         else:
-            mol3d_list = [(query[i]["mol"], i, args.pharm_feats) for i in query if query[i]["mol"].GetConformer().Is3D()]
-            mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query if
-                          query[i]["mol"].GetConformer().Is3D() is False]
+            if args.input.endswith(".csv") or args.input.endswith(".xlsx"):
+                mol3d_list = []
+                mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query]
+            else:
+                mol3d_list = [(query[i]["mol"], i, args.pharm_feats) for i in query if query[i]["mol"].GetConformer().Is3D()]
+                mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query if
+                              query[i]["mol"].GetConformer().Is3D() is False]
         if mol2d_list:
             print(f"Generating 3D conformer(s) for {len(mol2d_list)} query molecule(s)")
             query_confs = pool_shape.starmap(shapesearch.gen_query_conf_pfp_mp, mol2d_list)
             for entry in query_confs:
                 query[entry[0]]["confs"] = entry[1]
-                query[entry[0]]["fp_shape"] = entry[2]
             del query_confs
-            print(query)
         if mol3d_list:
             query_confs = pool_shape.starmap(shapesearch.gen_query_pfp_mp, mol3d_list)
             print(query_confs)
             for entry in query_confs:
                 query[entry[0]]["confs"] = entry[1]
-                query[entry[0]]["fp_shape"] = entry[2]
             del query_confs
-            print(query)
         algs = pool_shape.starmap(shapesearch.shape_mp, [(mols[i]["confs"], i, mols[i]["pattern"], query[j]["confs"], j,
-                                                               query[j]["fp_shape"], k, nthreads, args.shape_simi, args.fp_simi, args.tver_alpha, args.tver_beta, args.align_method, args.pharm_feats) for i in mols for j
+                                                               k, nthreads, args.shape_simi, args.fp_simi, args.tver_alpha, args.tver_beta, args.align_method, args.pharm_feats) for i in mols for j
                                                               in query for k in
                                                               range(query[j]["confs"].GetNumConformers()) if "confs" in mols[i]])
+        algs = [entry for entry in algs if entry]
         pool_shape.close()
     else:
         shapesearch.gen_query_conf_pfp(query, args.nconfs, seed, args.keep_confs, nthreads, args.align_method, args.pharm_feats)
         algs = shapesearch.shape_search(mols, query, nthreads, args.align_method, args.shape_simi, args.fp_simi, args.pharm_feats, args.tver_alpha, args.tver_beta)
+    search_end = time.time()
+    search_time = search_end - search_start
+    print(search_time)
     # sort results
+    print("Filtering and sorting results...")
     grouped_algs = [res for res in (list(group) for k, group in groupby(sorted(algs, key=lambda entry: entry[3]), lambda x: x[3]))]
     grouped = []
     if args.score == "combo":
         sort_score = 0
-    else:
+    elif args.score == "shape":
         sort_score = 1
+    else:
+        sort_score = 2
     if args.cutoff:
         for res in grouped_algs:
             gr = sorted([max(conf, key=lambda entry: entry[sort_score]) for conf in (list(group) for k, group in groupby(res, lambda x: x[8]))], reverse=True)
-            print(gr)
             gr_res = [entry for entry in gr if entry[sort_score] >= args.cutoff]
             del gr
-            print(gr_res)
-            print(len(gr_res))
             grouped.append(gr_res)
     else:
         for res in grouped_algs:
             gr_res = sorted([max(conf, key=lambda entry: entry[sort_score]) for conf in (list(group) for k, group in groupby(res, lambda x: x[8]))],
                         reverse=True)[:args.top_hits]
-            print(gr_res)
-            print(len(gr_res))
             grouped.append(gr_res)
     results = {}
     counter = 0
@@ -896,7 +894,7 @@ def shape(args):
             counter += 1
     print(results)
     # write results to output files
-    print(len(results))
+    print("Writing results to output files...")
     out_file = args.output.rsplit(".sdf", maxsplit=1)[0]
     for j in query:
         with open(f"{out_file}_{j + 1}.sdf", "w") as out:
@@ -910,7 +908,7 @@ def shape(args):
         for j in query:
             visualize.export_pymol(f"{out_file}_{j + 1}_query.sdf", f"{out_file}_{j + 1}.sdf")
     if args.pdf:
-        visualize.gen_pdf_shape(query, results, out_file, ttf_path)
+        visualize.gen_pdf_shape(query, results, out_file)
 
 
 shape_sim.set_defaults(func=shape)
@@ -940,11 +938,34 @@ canon.add_argument("--rms_thresh", help="if specified, only those conformations 
 canon.add_argument("--seed", type=int, help="specify seed for random number generator, for reproducibility", metavar="")
 canon.add_argument("--boost", help="distributes conformer generation on all available threads of your cpu",
                    action="store_true")
+canon.add_argument("--header", help="Specify number of row in csv/xlsx containing the column names "
+                                     "[default: 1, e.g. first row]", type=int, metavar="")
+canon.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
+                                         "not automatically recognized", metavar="")
+canon.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
+
 
 
 def canon_mol(args):
     start_time = time.time()
     print(f"Start: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    # check args.nproc
+    if args.nproc:
+        if 1 < args.nproc < mp.cpu_count():
+            print(f"Running in parallel mode on {args.nproc} threads")
+            can_pool = mp.Pool(processes=args.nproc)
+            pass
+        elif args.nproc <= 1:
+            can_pool = None
+            print("Running in single core mode")
+            args.nproc = None
+        else:
+            args.nproc = mp.cpu_count()
+            can_pool = mp.Pool(processes=mp.cpu_count())
+            print(f"Running in parallel mode on {args.nproc} threads")
+    else:
+        can_pool = None
+        print("Running in single core mode")
     if args.boost:
         nthreads = 0
     else:
@@ -1017,39 +1038,37 @@ def canon_mol(args):
     standardized = "no"
     conformers = "no"
     seed = None
+    # read input file
+    if args.input.endswith(".sdf"):
+        if args.nproc:
+            mols, failed = read.read_sd_mp(args.input, can_pool, mode="prepare")
+        else:
+            mols, failed = read.read_prepare_db_from_sd(args.input)
+    elif args.input.endswith(".sdf.gz"):
+        if args.nproc:
+            mols, failed = read.read_sd_mp(args.input, can_pool, mode="prepare", gz=True)
+        else:
+            mols, failed = read.read_prepare_db_from_sd(args.input, mode="gz")
+    elif args.input.endswith(".xlsx"):
+        mols = read.read_excel(args.input, args.mol_column, header=args.header, db=True)
+    elif args.input.endswith(".csv"):
+        mols = read.read_csv(args.input, args.mol_column, args.delimiter, header=args.header, db=True)
+    else:
+        mols, failed = {}, []
+        parser.exit(status=2, message="File format not supported")
+    #print(f"{len(failed)} molecules out of {len(mols)} could not be processed")
+    print(f"Finished reading sdf file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     if args.standardize:
         standardized = "yes"
         if args.nproc:
-            can_pool = mp.Pool(processes=args.nproc)
-            data, failed = read.read_sd_mp(args.input, can_pool)
-            print(f"Finished reading sdf file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
-            if failed:
-                print(f"{len(failed)} molecules out of {len(data)} could not be processed")
-            data_can = can_pool.starmap(prepare.do_standard, [(data[n]["mol"], data[n]["props"], args.ntauts) for n in data])
-            mols = {}
-            for i in range(len(data_can)):
-                mols[i] = data_can[i]
-            can_pool.close()
+            data_can = can_pool.starmap(prepare.do_standard_mp,
+                                        [(mols[n]["mol"], n, args.max_tauts) for n in mols])
+            for entry in data_can:
+                mols[entry[0]]["mol_sta"] = entry[1]
+                mols[entry[0]]["mol_can"] = entry[2]
         else:
-            data, failed = read.read_db_from_sd(args.input)
-            print(f"Finished reading sdf file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
-            if failed:
-                print(f"{len(failed)} molecules out of {len(data)} could not be processed")
-
-            mols = {}
-            for n in data:
-                std = prepare.do_standard(data[n]["mol"], data[n]["props"], args.ntauts)
-                mols[n] = std
+            prepare.do_standard(mols, args.max_tauts)
         print(f"Finished standardizing molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
-    else:
-        if args.nproc:
-            can_pool = mp.Pool(processes=args.nproc)
-            mols, failed = read.read_sd_mp(args.input, can_pool, mode="prepare")
-            can_pool.close()
-        else:
-            mols, failed = read.read_prepare_db_from_sd(args.input)
-        if failed:
-            print(f"{len(failed)} molecules out of {len(mols) + len(failed)} could not be processed")
     if args.conformers:
         conformers = "yes"
         for i in mols:
@@ -1059,22 +1078,16 @@ def canon_mol(args):
             except KeyError:
                 key = "mol"
             break
-        # if args.threshold:
-        #     threshold = args.threshold
-        # else:
-        #     threshold = -1.0
         print(key)
         if args.seed:
             seed = args.seed
         else:
             seed = random.randint(0, 10000)
         if args.nproc:
-            can_pool = mp.Pool(processes=args.nproc)
             confs = can_pool.starmap(prepare.gen_confs_mp, [(mols[i][key], i, args.nconfs, seed, nthreads) for i in mols])
             for entry in confs:
                 mols[entry[1]]["confs"] = entry[0]
                 mols[entry[1]]["pattern"] = entry[2]
-            can_pool.close()
         else:
             prepare.gen_confs(mols, args.nconfs, seed, key, nthreads)
     for i in mols:
@@ -1092,7 +1105,10 @@ def canon_mol(args):
         pickle.dump(db_config, open(f"{home}/.vsflow/.db_config", "wb"))
         print(f"{args.input} was integrated as database {db_name} in VSFlow. You can now search the database calling -db "
               f"{db_name}.")
-
+    try:
+        can_pool.close()
+    except AttributeError:
+        pass
     end_time = time.time()
     duration = round(end_time - start_time)
     print(f"Finished in {duration} seconds")
