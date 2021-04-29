@@ -2,8 +2,6 @@ from rdkit.Chem import AllChem as Chem
 import xlsxwriter
 import os
 import csv
-from pymol import cmd
-
 
 
 def write_sdf(mol, props, output):
@@ -12,11 +10,7 @@ def write_sdf(mol, props, output):
         block[0] = props["Title"]
     except KeyError:
         pass
-    block[1] = "   VSFlow 1.0 (RDKit 3D)"
-    # for line in block:
-    #     if line.startswith("     RDKit          2D"):
-    #         new_line = "   VSFlow 1.0 (RDKit 2D)"
-    #         block[block.index("     RDKit          2D")] = new_line
+    block[1] = "   VSFlow 1.0 (RDKit 2D)"
     for tag in props.items():
         block.append(f">  <{tag[0]}>")
         block.append(f"{tag[1]}")
@@ -33,10 +27,6 @@ def write_sdf_conformer(mol, props, confId, output):
     except KeyError:
         pass
     block[1] = "   VSFlow 1.0 (RDKit 3D)"
-    # for line in block:
-    #     if line.startswith("     RDKit          3D"):
-    #         new_line = "   VSFlow 1.0 (RDKit 3D)"
-    #         block[block.index("     RDKit          3D")] = new_line
     for tag in props.items():
         block.append(f">  <{tag[0]}>")
         block.append(f"{tag[1]}")
@@ -100,7 +90,6 @@ def gen_csv_xls_mult(query, results, output):
         sorteddict = {"Smiles": 0}
         for n in results:
             if results[n]["q_num"] == m:
-                #results[n][1]["QuerySmiles"] = getattr(results[n][0], f"__query_{m}")
                 sort_props(results[n]["props"], sorteddict)
                 prepare_lines(results[n]["mol"], results[n]["props"], sorteddict, lines)
         if lines:
@@ -118,8 +107,6 @@ def gen_sdf_mult(query, results, output):
             for n in results:
                 if results[n]["q_num"] == m:
                     query_count += 1
-                    #results[n][1]["QuerySmiles"] = getattr(results[n][0], f"__query_{m}")
-                    #results[n][1]["MatchAtoms"] = getattr(results[n][0], f"__prop_{m}")
                     write_sdf(results[n]["mol"], results[n]["props"], output)
         if query_count > 0:
             counter += 1
@@ -135,7 +122,6 @@ def gen_csv_xls(results, output):
     lines = []
     sorteddict = {"Smiles": 0}
     for n in results:
-        #set_query_info(query, results[n][0], results[n][1])
         sort_props(results[n]["props"], sorteddict)
         prepare_lines(results[n]["mol"], results[n]["props"], sorteddict, lines)
     if lines:
@@ -146,6 +132,5 @@ def gen_sdf(results, output):
     out_file = output.rsplit(".sdf", maxsplit=1)[0]
     with open(f"{out_file}.sdf", "w") as out:
         for n in results:
-            #set_query_info(query, results[n][0], results[n][1])
             write_sdf(results[n]["mol"], results[n]["props"], out)
 
