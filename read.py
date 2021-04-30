@@ -72,6 +72,19 @@ def read_smarts(smarts):
     return sub
 
 
+def read_smarts_file(file):
+    sub = {}
+    with open(file, "r") as sma_file:
+        content = sma_file.readlines()
+    for i in range(len(content)):
+        sma = content[i].strip("\n")
+        if sma != "":
+            mol = Chem.MolFromSmarts(sma)
+            if mol:
+                sub[i] = {"mol": mol, "pattern": sma, "tauts": [mol]}
+    return sub
+
+
 def read_sd(infile, mode, ntauts, gz=False):
     sub = {}
     if gz:
@@ -469,7 +482,7 @@ def read_excel(filename, smiles_column, mode="std", ntauts=100, header=None, db=
     return sub
 
 
-def read_file(filename, smiles_column, delimiter, mode, ntauts):
+def read_file(filename, smiles_column, delimiter, mode, ntauts, smarts=False):
     if filename.endswith(".sdf"):
         sub = read_sd(filename, mode, ntauts)
     elif filename.endswith(".sdf.gz"):
@@ -478,6 +491,11 @@ def read_file(filename, smiles_column, delimiter, mode, ntauts):
         sub = read_csv(filename, smiles_column, delimiter, mode, ntauts)
     elif filename.endswith(".xlsx"):
         sub = read_excel(filename, smiles_column, mode, ntauts)
+    elif filename.endswith(".sma"):
+        if smarts:
+            sub = read_smarts_file(filename)
+        else:
+            sub = {}
     else:
         sub = {}
     return sub
