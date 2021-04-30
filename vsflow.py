@@ -145,8 +145,6 @@ substructure.add_argument("--mol_column",
                                "automatically recognized", metavar="")
 substructure.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized",
                           metavar="")
-# substructure.add_argument("--header", help="Specify number of row in csv/xlsx file to be used as column names "
-#                                            "[default: 1, e.g. first row]", type=int, default=1, metavar="")
 substructure.add_argument("--pdf", help="generate a pdf file for all results", action="store_true")
 substructure.add_argument("--combine", help="if specified, multiple arguments provided via -smi or -sma are combined to one query",
                           action="store_true")
@@ -191,7 +189,7 @@ def read_database(args):
             try:
                 mols = pickle.load(open(f"{config['global_db']}/{args.database}.vsdb", "rb"))
             except FileNotFoundError:
-                parser.error(
+                parser.exit(status=1,
                     message=f"{args.database} not found. Please make sure you specified the correct shortcut")
     else:
         if os.path.exists(args.database):
@@ -199,7 +197,7 @@ def read_database(args):
                 try:
                     mols = pickle.load(open(args.database, "rb"))
                 except:
-                    parser.error(message=f"{args.output} could not be opened. Please make sure the file has the correct "
+                    parser.exit(status=1, message=f"{args.database} could not be opened. Please make sure the file has the correct "
                                                f"format")
 
             else:
@@ -216,44 +214,44 @@ def read_database(args):
                     if args.database.endswith(".sdf"):
                         mols, failed = read.read_db_from_sd(args.database)
                     else:
-                        mols, failed = read.read_db_from_sd(args.database, mode="gz")
+                        mols, failed = read.read_db_from_sd(args.database, gz=True)
                 if failed:
                     print(f"{len(failed)} of {len(mols) + len(failed)} molecules in {args.database} could not be processed")
                 if not mols:
-                    parser.error(message="No molecules could be read from SD file. Please make sure it has the right "
+                    parser.exit(status=1, message="No molecules could be read from SD file. Please make sure it has the right "
                                                "format")
         else:
-            parser.error(message=f"File {args.database} not found. Please make sure you specified the correct path")
+            parser.exit(status=1, message=f"File {args.database} not found. Please make sure you specified the correct path")
     return mols
 
 
-def read_input(args):
-    if args.smarts:
-        query = read.read_smarts(args.smarts)
+def read_input(smarts, smiles, infile, mode, ntauts, mol_column, delimiter, read_smarts=False):
+    if smarts:
+        query = read.read_smarts(smarts)
         if not query:
-            parser.error(message="No valid molecule(s) could be generated from the provided SMARTS.")
-    elif args.smiles:
-        query = read.read_smiles(args.smiles, args.mode, args.ntauts)
+            parser.exit(status=1, message="No valid molecule(s) could be generated from the provided SMARTS.")
+    elif smiles:
+        query = read.read_smiles(smiles, mode, ntauts)
         if not query:
-            parser.error(message="No valid molecule(s) could be generated from the provided SMILES.")
+            parser.exit(status=1, message="No valid molecule(s) could be generated from the provided SMILES.")
     else:
-        if os.path.exists(args.input):
-            query = read.read_file(args.input, args.mol_column, args.delimiter, args.mode, args.ntauts)
+        if os.path.exists(infile):
+            query = read.read_file(infile, mol_column, delimiter, mode, ntauts, read_smarts)
             if not query:
-                if args.input.endswith(".sdf"):# or args.input_format == "sdf":
-                    parser.error(message="No valid molecules could be read from SD file.")
-                elif args.input.endswith(".csv"):# or args.input_format == "csv":
-                    parser.error(message="No valid molecules could be read from input file. Please check/specify "
+                if infile.endswith(".sdf"):
+                    parser.exit(status=1, message="No valid molecules could be read from SD file.")
+                elif infile.endswith(".csv") or infile.endswith(".smi") or infile.endswith(".ich") or infile.endswith(".tsv"):# or args.input_format == "csv":
+                    parser.exit(status=1, message="No valid molecules could be read from input file. Please check/specify "
                                                "name of SMILES/InChI containing column (--mol_column) or check/specify the"
                                                "separator (--delimiter)")
-                elif args.input.endswith(".xlsx"):# or args.input_format == "xlsx":
-                    parser.error(message="No valid molecules could be read from input file. Please check/specify "
+                elif infile.endswith(".xlsx"):
+                    parser.exit(status=1, message="No valid molecules could be read from input file. Please check/specify "
                                                "name of SMILES/InChI containing column (--mol_column))")
                 else:
-                    parser.error(message="File format not recognized. Please specify the file format (--file_format)")
+                    parser.exit(status=1, message="File format not recognized. Supported formats are: .sdf, .sdf.gz, .csv, .smi, .ich, .tsv, .xlsx")
         else:
             query = {}
-            parser.error(message=f"File {args.input} not found. Please make sure you specified the correct path")
+            parser.exit(status=1, message=f"File {infile} not found. Please make sure you specified the correct path")
     return query
 
 
@@ -279,10 +277,8 @@ def substruct(args):
     else:
         filter_dict = {}
     # check if output path is valid
-    if "/" in args.output:
-        out_path = args.output.rsplit("/", maxsplit=1)[0]
-        if not os.path.exists(out_path):
-            parser.error(message=f"{args.output} is no valid path. Please check if you specified the correct path")
+    if not os.path.exists(os.path.dirname(args.output)):
+        parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
     print(f"Loading database {args.database} ...")
     sub_time = time.time()
     # load database if database path is valid
@@ -296,7 +292,7 @@ def substruct(args):
     print(sub_dur)
     print("Reading query input ...")
     # load input if paths are correct
-    query = read_input(args)
+    query = read_input(args.smarts, args.smiles, args.input, args.mode, args.ntauts, args.mol_column, args.delimiter, read_smarts=True)
     # set mol used based on selected mode and database
     if db_desc:
         if db_desc[0] == "yes":
@@ -421,8 +417,6 @@ group_fp = fp_sim.add_mutually_exclusive_group(required=True)
 group_fp.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="")
 group_fp.add_argument("-smi", "--smiles", help="specify SMILES string on command line in double quotes",
                       action="append", metavar="")
-group_fp.add_argument("-sma", "--smarts", help="specify SMARTS string on command line in double quotes",
-                      action="append", metavar="")
 fp_sim.add_argument("-d", "--database", help="specify path of the database file [sdf or vsdb] or specify the shortcut "
                                              "for an integrated database", default=db_default, metavar="")
 fp_sim.add_argument("-o", "--output", help="specify name of output file [default: fingerprint.sdf]",
@@ -454,8 +448,6 @@ fp_sim.add_argument("--filter", help="specify property to filter screening resul
 fp_sim.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
                                          "not automatically recognized", metavar="")
 fp_sim.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
-# fp_sim.add_argument("--header", help="Specify number of row in csv/xlsx file to be used as column names "
-#                                      "[default: 1, e.g. first row]", type=int, default=1, metavar="")
 fp_sim.add_argument("--pdf", help="generate a pdf file for all results", action="store_true")
 fp_sim.add_argument("--simmap", help="generates similarity maps for supported fingerprints in pdf file",
                     action="store_true")
@@ -488,10 +480,8 @@ def fingerprint(args):
     else:
         filter_dict = {}
     # check if output path is valid
-    if "/" in args.output:
-        out_path = args.output.rsplit("/", maxsplit=1)[0]
-        if not os.path.exists(out_path):
-            parser.error(message=f"{args.output} is no valid path. Please check if you specified the correct path")
+    if not os.path.exists(os.path.dirname(args.output)):
+        parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
     print(f"Loading database {args.database} ...")
     sub_time = time.time()
     # load database if database path is valid
@@ -505,7 +495,7 @@ def fingerprint(args):
     print(sub_dur)
     print("Reading query input ...")
     # load input if paths are correct
-    query = read_input(args)
+    query = read_input(None, args.smiles, args.input, args.mode, args.ntauts, args.mol_column, args.delimiter)
     # set mol used based on selected parameters and database
     if db_desc:
         if db_desc[0] == "yes":
@@ -758,11 +748,16 @@ def shape(args):
             print(f"Running in parallel mode on {args.nproc} threads")
     else:
         print("Running in single core mode")
+    # set parallelization via C++ code of RDKit
     if args.boost:
         nthreads = 0
     else:
         nthreads = 1
+    # check if output path is valid
+    if not os.path.exists(os.path.dirname(args.output)):
+        parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
     mols = {}
+    # load database
     if args.database in db_config:
         try:
             mols = pickle.load(open(f"{config['local_db']}/{args.database}.vsdb", "rb"))
@@ -770,7 +765,7 @@ def shape(args):
             try:
                 mols = pickle.load(open(f"{config['global_db']}/{args.database}.vsdb", "rb"))
             except FileNotFoundError:
-                parser.error(
+                parser.exit(status=1,
                     message=f"{args.database} not found. Please make sure you specified the correct shortcut")
     else:
         if os.path.exists(args.database):
@@ -778,21 +773,27 @@ def shape(args):
                 try:
                     mols = pickle.load(open(args.database, "rb"))
                 except:
-                    parser.error(message=f"{args.database} could not be opened. Please make sure the file has the correct "
+                    parser.exit(status=1, message=f"{args.database} could not be opened. Please make sure the file has the correct "
                                                f"format")
             elif args.database.endswith(".sdf"):
-                mols, _ = read.read_db_from_sd_3d(args.database)
+                if args.nproc:
+                    mols, _ = read.read_sd_mp(args.database, pool=mp.Pool(processes=args.nproc), mode="3d")
+                else:
+                    mols, _ = read.read_db_from_sd_3d(args.database)
                 if not mols:
-                    parser.exit(status=2, message="No molecules with 3D coordinates could be read from SD file !")
+                    parser.exit(status=1, message="No molecules with 3D coordinates could be read from SD file !")
             elif args.database.endswith(".sdf.gz"):
-                mols, _ = read.read_db_from_sd_3d(args.database, mode="gz")
+                if args.nproc:
+                    mols, _ = read.read_sd_mp(args.database, pool=mp.Pool(processes=args.nproc), mode="3d", gz=True)
+                else:
+                    mols, _ = read.read_db_from_sd_3d(args.database, gz=True)
                 if not mols:
-                    parser.exit(status=2, message="No molecules with 3D coordinates could be read from SD file !")
+                    parser.exit(status=1, message="No molecules with 3D coordinates could be read from SD file !")
             else:
-                parser.error(message="Database must have format .vsdb or .sdf. Use mode preparedb to prepare a database for"
+                parser.exit(status=1, message="Database file must have format .vsdb or .sdf/.sdf.gz. Use mode preparedb to prepare a database for"
                                      " shape similarity screening.")
         else:
-            parser.error(message=f"{args.database} could not be opened. "
+            parser.exit(status=1, message=f"{args.database} could not be opened. "
                                  f"Please make sure you specified the correct path")
     try:
         db_desc = mols.pop("config")
@@ -813,12 +814,14 @@ def shape(args):
     else:
         if args.input.endswith(".sdf"):
             query = read.read_sd(args.input, mode="std", ntauts=None)
-        elif args.input.endswith(".csv"):
+        elif args.input.endswith(".sdf.gz"):
+            query = read.read_sd(args.input, mode="std", ntauts=None, gz=True)
+        elif args.input.endswith(".csv") or args.input.endswith(".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv"):
             query = read.read_csv(args.input, args.mol_column, args.delimiter, mode="std", ntauts=None)
         else:
             query = read.read_excel(args.input, args.mol_column, mode="std", ntauts=None)
     if not query:
-        parser.exit(status=2, message="No molecules could be read from input file")
+        parser.exit(status=1, message="No molecules could be read from input file")
     print(query)
     # perform shape screening with specified parameters
     search_start = time.time()
@@ -828,7 +831,7 @@ def shape(args):
             mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query]
             mol3d_list = []
         else:
-            if args.input.endswith(".csv") or args.input.endswith(".xlsx"):
+            if args.input.endswith(".csv") or args.input.endswith(".xlsx") or args.input.endswith(".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv"):
                 mol3d_list = []
                 mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query]
             else:
@@ -916,37 +919,42 @@ shape_sim.set_defaults(func=shape)
 
 ## prepare databases for screening
 
-canon = subparsers.add_parser("preparedb")
-canon.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx] (required)", required=True, metavar="infile")
-canon.add_argument("-o", "--output", default="prep_database.vsdb", help="specify name of output file [default: prep_database.vsdb]",
+prepare_db = subparsers.add_parser("preparedb")
+prepare_db.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx] (required)", required=True, metavar="infile")
+prepare_db.add_argument("-o", "--output", default="prep_database.vsdb", help="specify name of output file [default: prep_database.vsdb]",
                    metavar="")
-canon.add_argument("-int", "--integrate", help="specify shortcut for database; saves database to $HOME/VSFlow_Databases", metavar="")
-canon.add_argument("-intg", "--int_global", help="stores database in {path_to_script}/Databases instead of $HOME/VSFlow_Databases, "
+prepare_db.add_argument("-int", "--integrate", help="specify shortcut for database; saves database to $HOME/VSFlow_Databases", metavar="")
+prepare_db.add_argument("-intg", "--int_global", help="stores database in {path_to_script}/Databases instead of $HOME/VSFlow_Databases, "
                                                  "can only be specified together with --integrate flag",
                    action="store_true")
-canon.add_argument("-s", "--standardize", help="standardizes molecules, removes salts and associated charges",
+prepare_db.add_argument("-s", "--standardize", help="standardizes molecules, removes salts and associated charges",
                    action="store_true")
-canon.add_argument("-c", "--conformers", help="generates multiple 3D conformers, required for mode shape",
+prepare_db.add_argument("-c", "--conformers", help="generates multiple 3D conformers, required for mode shape",
                    action="store_true")
-canon.add_argument("-np", "--nproc", type=int, help="specify number of processors to run application in multiprocessing mode", metavar="")
-canon.add_argument("--max_tauts", help="maximum number of tautomers to be enumerated during standardization process",
+prepare_db.add_argument("-np", "--nproc", type=int, help="specify number of processors to run application in multiprocessing mode", metavar="")
+prepare_db.add_argument("--max_tauts", help="maximum number of tautomers to be enumerated during standardization process",
                    type=int, default=100, metavar="")
-canon.add_argument("--nconfs", help="maximal number of conformers generated", type=int, default=20, metavar="")
-canon.add_argument("--rms_thresh", help="if specified, only those conformations out of nconfs that are at least "
+prepare_db.add_argument("--nconfs", help="maximal number of conformers generated", type=int, default=20, metavar="")
+prepare_db.add_argument("--rms_thresh", help="if specified, only those conformations out of nconfs that are at least "
                                         "this different are retained (RMSD calculated on heavy atoms)", type=float,
                    metavar="")
-canon.add_argument("--seed", type=int, help="specify seed for random number generator, for reproducibility", metavar="")
-canon.add_argument("--boost", help="distributes conformer generation on all available threads of your cpu",
+prepare_db.add_argument("--seed", type=int, help="specify seed for random number generator, for reproducibility", metavar="")
+prepare_db.add_argument("--boost", help="distributes conformer generation on all available threads of your cpu",
                    action="store_true")
-canon.add_argument("--header", help="Specify number of row in csv/xlsx containing the column names "
+prepare_db.add_argument("--header", help="Specify number of row in csv/xlsx containing the column names "
                                      "[default: 1, e.g. first row]", type=int, metavar="")
-canon.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
+prepare_db.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
                                          "not automatically recognized", metavar="")
-canon.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
+prepare_db.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
 
 
-
-def canon_mol(args):
+def prep_db(args):
+    """
+    Prepare compound databases for virtual screening
+    :param args: arguments parsed from command-line
+    :type args: argparse.Namespace
+    :return: None
+    """
     start_time = time.time()
     print(f"Start: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # check args.nproc
@@ -966,10 +974,15 @@ def canon_mol(args):
     else:
         can_pool = None
         print("Running in single core mode")
+    # set parallelization via C++ code of RDKit
     if args.boost:
         nthreads = 0
     else:
         nthreads = 1
+    # check if output path is valid
+    if not os.path.exists(os.path.dirname(args.output)):
+        parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
+    # check
     if args.integrate:
         db_name = args.integrate
         if args.int_global:
@@ -981,7 +994,7 @@ def canon_mol(args):
                 else:
                     os.mkdir(db_path)
             except PermissionError:
-                canon.error(message="You do not have the permission to integrate a database globally. Please contact "
+                parser.exit(status=2, message="You do not have the permission to integrate a database globally. Please contact "
                                     "your system administrator or re-run with sudo permissions !")
         else:
             db_path = config["local_db"]
@@ -991,11 +1004,11 @@ def canon_mol(args):
                 else:
                     os.mkdir(db_path)
             except FileNotFoundError:
-                canon.error(message="Path not valid. Please make sure you specified a correct path !")
+                parser.exit(status=1, message="Path not valid. Please make sure you specified a correct path !")
             except PermissionError:
-                canon.error(message="Permission denied")
+                parser.exit(status=2, message="Permission denied")
             except OSError:
-                canon.error(message="Permission denied")
+                parser.exit(status=2, message="Permission denied")
         if args.integrate in db_config:
             choice = input(
                 f"A database with name {db_name} is already integrated in VSFlow. Press 'o' to override the database, "
@@ -1048,16 +1061,16 @@ def canon_mol(args):
         if args.nproc:
             mols, failed = read.read_sd_mp(args.input, can_pool, mode="prepare", gz=True)
         else:
-            mols, failed = read.read_prepare_db_from_sd(args.input, mode="gz")
+            mols, failed = read.read_prepare_db_from_sd(args.input, gz=False)
     elif args.input.endswith(".xlsx"):
         mols = read.read_excel(args.input, args.mol_column, header=args.header, db=True)
-    elif args.input.endswith(".csv"):
+    elif args.input.endswith(".csv") or args.input.endswith(".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv"):
         mols = read.read_csv(args.input, args.mol_column, args.delimiter, header=args.header, db=True)
     else:
         mols, failed = {}, []
         parser.exit(status=2, message="File format not supported")
     #print(f"{len(failed)} molecules out of {len(mols)} could not be processed")
-    print(f"Finished reading sdf file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    print(f"Finished reading input file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     if args.standardize:
         standardized = "yes"
         if args.nproc:
@@ -1114,7 +1127,7 @@ def canon_mol(args):
     print(f"Finished in {duration} seconds")
 
 
-canon.set_defaults(func=canon_mol)
+prepare_db.set_defaults(func=prep_db)
 
 
 ## show integrated databases
@@ -1196,7 +1209,6 @@ def get_db(args):
                               f"administrator!")
         else:
             print(f"No database with name {args.remove} integrated in VSFlow !")
-
 
 
 show_db.set_defaults(func=get_db)
