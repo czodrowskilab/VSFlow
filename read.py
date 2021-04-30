@@ -72,10 +72,14 @@ def read_smarts(smarts):
     return sub
 
 
-def read_sd(infile, mode, ntauts):
+def read_sd(infile, mode, ntauts, gz=False):
     sub = {}
-    with open(infile, "r") as sd_file:
-        content = sd_file.readlines()
+    if gz:
+        with gzip.open(infile, mode="rt") as inf:
+            content = inf.readlines()
+    else:
+        with open(infile, "r") as sd_file:
+            content = sd_file.readlines()
     try:
         sd_blocks = [list(group) for k, group in groupby(content, lambda x: x == "$$$$\n") if not k]
     except ValueError:
@@ -117,6 +121,7 @@ def read_sd(infile, mode, ntauts):
 
 def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=None, db=False):
     sub = {}
+    mol_func = Chem.MolFromSmiles
     with open(filename, "r") as file:
         content = file.readlines()
     if delimiter is None:
@@ -127,13 +132,52 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                     if len(content[0].strip("\n").split(sep)) > 1:
                         delimiter = sep
         if delimiter is None:
+            counter = 0
+            for line in content:
+                if line != "":
+                    mol = mol_func(line.strip("\n"))
+                    if mol:
+                        break
+                    mol = Chem.MolFromInchi(line.strip("\n"))
+                    if mol:
+                        mol_func = Chem.MolFromInchi
+                        break
+                    counter += 1
+                if counter >= 100:
+                    return sub
+            counter = 0
+            if mode == "std":
+                for line in content:
+                    mol = mol_func(line.strip("\n"))
+                    if mol:
+                        mol_sta = query_standardize(mol)
+                        sub[counter] = {"mol": mol_sta, "pattern": line.strip("\n")}
+                        counter += 1
+            elif mode == "can_taut":
+                for line in content:
+                    mol = mol_func(line.strip("\n"))
+                    if mol:
+                        mol_can = query_canonicalize(mol, ntauts)
+                        sub[counter] = {"mol": mol_can, "pattern": line.strip("\n")}
+                        counter += 1
+            elif mode == "all_tauts":
+                for line in content:
+                    mol = mol_func(line.strip("\n"))
+                    if mol:
+                        mol_tauts = query_enumerate(mol, ntauts)
+                        sub[counter] = {"mol": mol_tauts[0], "pattern": line.strip("\n"), "tauts": mol_tauts[1]}
+                        counter += 1
+            else:
+                for line in content:
+                    mol = mol_func(line.strip("\n"))
+                    if mol:
+                        sub[counter] = {"mol": mol, "pattern": line.strip("\n")}
+                        counter += 1
             return sub
     proc_content = {}
     for i in range(len(content)):
         proc_content[i] = content[i].strip("\n").split(delimiter)
     del content
-    mol_func = Chem.MolFromSmiles
-    name = "Smiles"
     if smiles_column is None:
         smi_pos = None
         counter = 0
@@ -147,7 +191,6 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                     mol = Chem.MolFromInchi(proc_content[n][i])
                     if mol:
                         mol_func = Chem.MolFromInchi
-                        name = "InChI"
                         smi_pos = i
                         break
             if smi_pos is not None:
@@ -168,7 +211,6 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                     mol = Chem.MolFromInchi(proc_content[n][smi_pos])
                     if mol:
                         mol_func = Chem.MolFromInchi
-                        name = "InChI"
                         break
                     counter += 1
                     if counter >= 100:
@@ -191,7 +233,6 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                     mol = Chem.MolFromInchi(proc_content[n][smi_pos])
                     if mol:
                         mol_func = Chem.MolFromInchi
-                        name = "InChI"
                         break
                     counter += 1
                     if counter >= 100:
@@ -218,7 +259,11 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                     if proc_content[n][smi_pos] != "":
                         mol = mol_func(proc_content[n][smi_pos])
                         if mol:
-                            props = {name: proc_content[n][smi_pos]}
+                            props = {}
+                            for i in range(len(proc_content[n])):
+                                #props = {name: proc_content[n][smi_pos]}
+
+                                props[i] = proc_content[n][i]
                             sub[n] = {"mol": mol, "pattern": proc_content[n][smi_pos], "props": props}
                 except IndexError:
                     continue
@@ -237,9 +282,9 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
             elif mode == "can_taut":
                 for n in proc_content:
                     try:
-                        mol = mol_func(proc_content[n][smi_pos])
-                        if mol:
-                            if proc_content[n][smi_pos] != "":
+                        if proc_content[n][smi_pos] != "":
+                            mol = mol_func(proc_content[n][smi_pos])
+                            if mol:
                                 mol_std = query_canonicalize(mol, ntauts)
                                 sub[n] = {"mol": mol_std, "pattern": proc_content[n][smi_pos]}
                     except IndexError:
@@ -247,9 +292,9 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
             elif mode == "all_tauts":
                 for n in proc_content:
                     try:
-                        mol = mol_func(proc_content[n][smi_pos])
-                        if mol:
-                            if proc_content[n][smi_pos] != "":
+                        if proc_content[n][smi_pos] != "":
+                            mol = mol_func(proc_content[n][smi_pos])
+                            if mol:
                                 mol_std = query_enumerate(mol, ntauts)
                                 sub[n] = {"mol": mol_std[0], "pattern": proc_content[n][smi_pos], "tauts": mol_std[1]}
                     except IndexError:
@@ -270,7 +315,6 @@ def read_excel(filename, smiles_column, mode="std", ntauts=100, header=None, db=
     sub = {}
     wb = open_workbook(filename)
     mol_func = Chem.MolFromSmiles
-    name = "Smiles"
     if smiles_column is None:
         smi_pos = None
         for sheet in wb.sheets():
@@ -286,7 +330,6 @@ def read_excel(filename, smiles_column, mode="std", ntauts=100, header=None, db=
                         mol = Chem.MolFromInchi(sheet.row(i)[j].value)
                         if mol:
                             mol_func = Chem.MolFromInchi
-                            name = "InChI"
                             smi_pos = j
                             break
                 if smi_pos is not None:
@@ -294,7 +337,6 @@ def read_excel(filename, smiles_column, mode="std", ntauts=100, header=None, db=
                 counter += 1
                 if counter >= 100:
                     return sub
-                    #return "Excel Error: Mol Column not found"
     else:
         smi_pos = None
         try:
@@ -310,14 +352,12 @@ def read_excel(filename, smiles_column, mode="std", ntauts=100, header=None, db=
                         mol = Chem.MolFromInchi(sheet.row(i)[smiles_column].value)
                         if mol:
                             mol_func = Chem.MolFromInchi
-                            name = "InChI"
                             break
                 if smi_pos is not None:
                     break
                 counter += 1
                 if counter >= 100:
                     return sub
-                    #return "Excel Error: No valid SMILES or InChI found in mol column"
         except ValueError:
             for sheet in wb.sheets():
                 counter = 0
@@ -342,7 +382,6 @@ def read_excel(filename, smiles_column, mode="std", ntauts=100, header=None, db=
                             mol = Chem.MolFromInchi(sheet.row(i)[j].value)
                             if mol:
                                 mol_func = Chem.MolFromInchi
-                                name = "InChI"
                                 break
                     counter += 1
                     if counter >= 100:
@@ -372,7 +411,9 @@ def read_excel(filename, smiles_column, mode="std", ntauts=100, header=None, db=
                         try:
                             mol = mol_func(sheet.row(i)[smi_pos].value)
                             if mol:
-                                props = {name: sheet.row(i)[smi_pos].value}
+                                props = {}
+                                for k in range(len(sheet.row(i))):
+                                    props[k] = sheet.row(i)[k].value
                                 sub[i] = {"mol": mol, "pattern": sheet.row(i)[smi_pos].value, "props": props}
                         except IndexError:
                             continue
@@ -429,21 +470,49 @@ def read_excel(filename, smiles_column, mode="std", ntauts=100, header=None, db=
 
 
 def read_file(filename, smiles_column, delimiter, mode, ntauts):
-    if filename.endswith(".sdf"):# or file_format == "sdf":
+    if filename.endswith(".sdf"):
         sub = read_sd(filename, mode, ntauts)
-    elif filename.endswith(".csv"):# or file_format == "csv":
+    elif filename.endswith(".sdf.gz"):
+        sub = read_sd(filename, mode, ntauts, gz=True)
+    elif filename.endswith(".csv") or filename.endswith(".smi") or filename.endswith(".ich") or filename.endswith(".tsv"):
         sub = read_csv(filename, smiles_column, delimiter, mode, ntauts)
-    elif filename.endswith(".xlsx"):# or file_format == "xlsx":
+    elif filename.endswith(".xlsx"):
         sub = read_excel(filename, smiles_column, mode, ntauts)
     else:
         sub = {}
     return sub
 
 
-def read_db_from_sd(infile, mode="read"):
+def read_tags(name, tags):
+    props = {}
+    if name:
+        props["Title"] = name
+    for line in tags:
+        if line.startswith(">  <") and not line.strip("\n").endswith(">"):
+            line_strip = line.strip("\n").strip(">  <")
+            key = line_strip[:line_strip.index(">")]
+            value = tags[tags.index(line) + 1].strip("\n")
+            props[key] = value
+        elif line.startswith(">  <") and line.strip("\n").endswith(">"):
+            key = line.strip("\n").strip("> <")
+            value = tags[tags.index(line) + 1].strip("\n")
+            props[key] = value
+        elif line.startswith("> <") and not line.strip("\n").endswith(">"):
+            line_strip = line.strip("\n").strip("> <")
+            key = line_strip[:line_strip.index(">")]
+            value = tags[tags.index(line) + 1].strip("\n")
+            props[key] = value
+        elif line.startswith("> <") and line.strip("\n").endswith(">"):
+            key = line.strip("\n").strip("> <")
+            value = tags[tags.index(line) + 1].strip("\n")
+            props[key] = value
+    return props
+
+
+def read_db_from_sd(infile, gz=False):
     sub = {}
     failed = []
-    if mode == "gz":
+    if gz:
         with gzip.open(infile, mode="rt") as inf:
             content = inf.readlines()
     else:
@@ -461,28 +530,7 @@ def read_db_from_sd(infile, mode="read"):
         if mol:
             name = mol.GetProp("_Name")
             tags = sd_blocks[i][sd_blocks[i].index("M  END\n") + 1:]
-            props = {}
-            if name:
-                props["Title"] = name
-            for line in tags:
-                if line.startswith(">  <") and not line.strip("\n").endswith(">"):
-                    line_strip = line.strip("\n").strip(">  <")
-                    key = line_strip[:line_strip.index(">")]
-                    value = tags[tags.index(line) + 1].strip("\n")
-                    props[key] = value
-                elif line.startswith(">  <") and line.strip("\n").endswith(">"):
-                    key = line.strip("\n").strip("> <")
-                    value = tags[tags.index(line) + 1].strip("\n")
-                    props[key] = value
-                elif line.startswith("> <") and not line.strip("\n").endswith(">"):
-                    line_strip = line.strip("\n").strip("> <")
-                    key = line_strip[:line_strip.index(">")]
-                    value = tags[tags.index(line) + 1].strip("\n")
-                    props[key] = value
-                elif line.startswith("> <") and line.strip("\n").endswith(">"):
-                    key = line.strip("\n").strip("> <")
-                    value = tags[tags.index(line) + 1].strip("\n")
-                    props[key] = value
+            props = read_tags(name, tags)
             sub[i] = {"mol": mol, "props": props}
         else:
             failed.append(i)
@@ -496,28 +544,7 @@ def read_mol_block(block):
     if mol:
         name = mol.GetProp("_Name")
         tags = block[block.index("M  END\n") + 1:]
-        props = {}
-        if name:
-            props["Title"] = name
-        for line in tags:
-            if line.startswith(">  <") and not line.strip("\n").endswith(">"):
-                line_strip = line.strip("\n").strip(">  <")
-                key = line_strip[:line_strip.index(">")]
-                value = tags[tags.index(line) + 1].strip("\n")
-                props[key] = value
-            elif line.startswith(">  <") and line.strip("\n").endswith(">"):
-                key = line.strip("\n").strip("> <")
-                value = tags[tags.index(line) + 1].strip("\n")
-                props[key] = value
-            elif line.startswith("> <") and not line.strip("\n").endswith(">"):
-                line_strip = line.strip("\n").strip("> <")
-                key = line_strip[:line_strip.index(">")]
-                value = tags[tags.index(line) + 1].strip("\n")
-                props[key] = value
-            elif line.startswith("> <") and line.strip("\n").endswith(">"):
-                key = line.strip("\n").strip("> <")
-                value = tags[tags.index(line) + 1].strip("\n")
-                props[key] = value
+        props = read_tags(name, tags)
         return {"mol": mol, "props": props}
 
 
@@ -530,33 +557,25 @@ def read_prepare_mol_block(block):
         mol2d = Chem.RemoveHs(mol)
         Chem.Compute2DCoords(mol2d)
         tags = block[block.index("M  END\n") + 1:]
-        props = {}
-        if name:
-            props["Title"] = name
-        for line in tags:
-            if line.startswith(">  <") and not line.strip("\n").endswith(">"):
-                line_strip = line.strip("\n").strip(">  <")
-                key = line_strip[:line_strip.index(">")]
-                value = tags[tags.index(line) + 1].strip("\n")
-                props[key] = value
-            elif line.startswith(">  <") and line.strip("\n").endswith(">"):
-                key = line.strip("\n").strip("> <")
-                value = tags[tags.index(line) + 1].strip("\n")
-                props[key] = value
-            elif line.startswith("> <") and not line.strip("\n").endswith(">"):
-                line_strip = line.strip("\n").strip("> <")
-                key = line_strip[:line_strip.index(">")]
-                value = tags[tags.index(line) + 1].strip("\n")
-                props[key] = value
-            elif line.startswith("> <") and line.strip("\n").endswith(">"):
-                key = line.strip("\n").strip("> <")
-                value = tags[tags.index(line) + 1].strip("\n")
-                props[key] = value
+        props = read_tags(name, tags)
         if mol.GetConformer().Is3D():
             mol3d = Chem.AddHs(mol, addCoords=True)
             return {"mol": mol2d, "props": props, "confs": mol3d, "pattern": Chem.MolToSmiles(mol2d)}
         else:
             return {"mol": mol2d, "props": props}
+
+
+def read_3d_mol_block(block):
+    mol_block_list = block[:block.index("M  END\n") + 1]
+    mol_block = ''.join([elem for elem in mol_block_list])
+    mol = Chem.MolFromMolBlock(mol_block)
+    if mol:
+        if mol.GetConformer().Is3D():
+            name = mol.GetProp("_Name")
+            tags = block[block.index("M  END\n") + 1:]
+            props = read_tags(name, tags)
+            mol3d = Chem.AddHs(mol, addCoords=True)
+            return {"props": props, "confs": mol3d, "pattern": Chem.MolToSmiles(mol)}
 
 
 def read_sd_mp(infile, pool, mode="read", gz=False):
@@ -576,6 +595,8 @@ def read_sd_mp(infile, pool, mode="read", gz=False):
     # pool = mp.Pool(processes=nproc)
     if mode == "read":
         mol_dict = pool.map(read_mol_block, [block for block in sd_blocks])
+    elif mode == "3d":
+        mol_dict = pool.map(read_3d_mol_block, [block for block in sd_blocks])
     else:
         mol_dict = pool.map(read_prepare_mol_block, [block for block in sd_blocks])
     for i in range(len(mol_dict)):
@@ -587,10 +608,10 @@ def read_sd_mp(infile, pool, mode="read", gz=False):
     return sub, failed
 
 
-def read_db_from_sd_3d(infile, mode="sd"):
+def read_db_from_sd_3d(infile, gz=False):
     sub = {}
     failed = []
-    if mode == "gz":
+    if gz:
         with gzip.open(infile, mode="rt") as inf:
             content = inf.readlines()
     else:
@@ -610,38 +631,17 @@ def read_db_from_sd_3d(infile, mode="sd"):
                 name = mol.GetProp("_Name")
                 mol = Chem.AddHs(mol, addCoords=True)
                 tags = sd_blocks[i][sd_blocks[i].index("M  END\n") + 1:]
-                props = {}
-                if name:
-                    props["Title"] = name
-                for line in tags:
-                    if line.startswith(">  <") and not line.strip("\n").endswith(">"):
-                        line_strip = line.strip("\n").strip(">  <")
-                        key = line_strip[:line_strip.index(">")]
-                        value = tags[tags.index(line) + 1].strip("\n")
-                        props[key] = value
-                    elif line.startswith(">  <") and line.strip("\n").endswith(">"):
-                        key = line.strip("\n").strip("> <")
-                        value = tags[tags.index(line) + 1].strip("\n")
-                        props[key] = value
-                    elif line.startswith("> <") and not line.strip("\n").endswith(">"):
-                        line_strip = line.strip("\n").strip("> <")
-                        key = line_strip[:line_strip.index(">")]
-                        value = tags[tags.index(line) + 1].strip("\n")
-                        props[key] = value
-                    elif line.startswith("> <") and line.strip("\n").endswith(">"):
-                        key = line.strip("\n").strip("> <")
-                        value = tags[tags.index(line) + 1].strip("\n")
-                        props[key] = value
+                props = read_tags(name, tags)
                 sub[i] = {"confs": mol, "props": props, "pattern": Chem.MolToSmiles(mol)}
         else:
             failed.append(i)
     return sub, failed
 
 
-def read_prepare_db_from_sd(infile, mode="sd"):
+def read_prepare_db_from_sd(infile, gz=False):
     sub = {}
     failed = []
-    if mode == "gz":
+    if gz:
         with gzip.open(infile, mode="rt") as inf:
             content = inf.readlines()
     else:
@@ -661,28 +661,7 @@ def read_prepare_db_from_sd(infile, mode="sd"):
             mol2d = Chem.RemoveHs(mol)
             Chem.Compute2DCoords(mol2d)
             tags = sd_blocks[i][sd_blocks[i].index("M  END\n") + 1:]
-            props = {}
-            if name:
-                props["Title"] = name
-            for line in tags:
-                if line.startswith(">  <") and not line.strip("\n").endswith(">"):
-                    line_strip = line.strip("\n").strip(">  <")
-                    key = line_strip[:line_strip.index(">")]
-                    value = tags[tags.index(line) + 1].strip("\n")
-                    props[key] = value
-                elif line.startswith(">  <") and line.strip("\n").endswith(">"):
-                    key = line.strip("\n").strip("> <")
-                    value = tags[tags.index(line) + 1].strip("\n")
-                    props[key] = value
-                elif line.startswith("> <") and not line.strip("\n").endswith(">"):
-                    line_strip = line.strip("\n").strip("> <")
-                    key = line_strip[:line_strip.index(">")]
-                    value = tags[tags.index(line) + 1].strip("\n")
-                    props[key] = value
-                elif line.startswith("> <") and line.strip("\n").endswith(">"):
-                    key = line.strip("\n").strip("> <")
-                    value = tags[tags.index(line) + 1].strip("\n")
-                    props[key] = value
+            props = read_tags(name, tags)
             if mol.GetConformer().Is3D():
                 mol3d = Chem.AddHs(mol, addCoords=True)
                 sub[i] = {"mol": mol2d, "props": props, "confs": mol3d, "pattern": Chem.MolToSmiles(mol2d)}
@@ -691,5 +670,3 @@ def read_prepare_db_from_sd(infile, mode="sd"):
         else:
             failed.append(i)
     return sub, failed
-
-
