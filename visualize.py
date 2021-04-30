@@ -123,7 +123,7 @@ def export_pdf(pages, out_file):
 
 
 def gen_pdf_mf(query, results, out_file):
-    COLOR = [(0.8, 0.0, 0.0)]
+    COLOR = [(0.95, 0.2, 0.2)]
     file_counter = 1
     for m in query:
         mol_keys = []
@@ -170,7 +170,7 @@ def gen_pdf_mf(query, results, out_file):
 
 def gen_pdf(query, results, out_file):
     for i in results:
-        COLS = [(0.8, 0.0, 0.0), (0.0, 0.8, 0.0),
+        COLS = [(0.95, 0.2, 0.2), (0.0, 0.8, 0.0),
                 (0.0, 0.0, 0.8), (1.0, 0.55, 1.0)]
         acols = {}
         bcols = {}
