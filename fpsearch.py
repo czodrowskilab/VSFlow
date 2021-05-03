@@ -34,7 +34,13 @@ def fp_rdkit(mols, key, nBits):
     for i in mols:
         fp = Chem.RDKFingerprint(mols[i][key], fpSize=nBits)
         mols[i]["fp"] = fp
-        #mols[i]["props"]["Fingerprint"] = "RDKit"
+
+
+def fp_rdkit_taut(query, nBits):
+    for i in query:
+        for j in range(len(query[i]["tauts"])):
+            fp = Chem.RDKFingerprint(query[i]["tauts"][j], fpSize=nBits)
+            query[i][f"fp{j}"] = fp
 
 
 def fp_morgan(mols, key, radius, nBits, features, chiral):
@@ -44,10 +50,25 @@ def fp_morgan(mols, key, radius, nBits, features, chiral):
         mols[i]["fp"] = fp
 
 
+def fp_morgan_taut(query, radius, nBits, features, chiral):
+    for i in query:
+        for j in range(len(query[i]["tauts"])):
+            fp = Chem.GetMorganFingerprintAsBitVect(query[i]["tauts"][j], radius, nBits=nBits, useFeatures=features,
+                                                    useChirality=chiral)
+            query[i][f"fp{j}"] = fp
+
+
 def fp_atompairs(mols, key, nBits, chiral):
     for i in mols:
         fp = Pairs.GetHashedAtomPairFingerprint(mols[i][key], nBits=nBits, includeChirality=chiral)
         mols[i]["fp"] = fp
+
+
+def fp_atompairs_taut(query, nBits, chiral):
+    for i in query:
+        for j in range(len(query[i]["tauts"])):
+            fp = Pairs.GetHashedAtomPairFingerprint(query[i]["tauts"][j], nBits=nBits, includeChirality=chiral)
+            query[i][f"fp{j}"] = fp
 
 
 def fp_maccs(mols, key):
@@ -56,25 +77,50 @@ def fp_maccs(mols, key):
         mols[i]["fp"] = fp
 
 
+def fp_maccs_taut(query):
+    for i in query:
+        for j in range(len(query[i]["tauts"])):
+            fp = MACCSkeys.GenMACCSKeys(query[i]["tauts"][j])
+            query[i][f"fp{j}"] = fp
+
+
 def fp_torsion(mols, key, nBits, chiral):
     for i in mols:
         fp = Torsions.GetHashedTopologicalTorsionFingerprint(mols[i][key], nBits=nBits, includeChirality=chiral)
         mols[i]["fp"] = fp
 
 
-def sim(mols, query, key, cutoff, similarity, filter_dict, name):
+def fp_torsion_taut(query, nBits, chiral):
+    for i in query:
+        for j in range(len(query[i]["tauts"])):
+            fp = Torsions.GetHashedTopologicalTorsionFingerprint(query[i]["tauts"][j], nBits=nBits, includeChirality=chiral)
+            query[i][f"fp{j}"] = fp
+
+
+def sim(mols, query, key, fp_key, cutoff, similarity, filter_dict, name, mode):
     results = {}
     counter = 0
     simis = []
-    for j in query:
-        for i in mols:
-    # for i in mols:
-    #     for j in query:
-            sim = sim_dict[similarity](mols[i]["fp"], query[j]["fp"])
-            if sim >= cutoff:
+    if mode == "all_tauts":
+        for j in query:
+            for i in mols:
+                int_simis = []
                 filt_mol = filter_res(mols[i][key], filter_dict)
                 if filt_mol:
-                    simis.append((sim, i ,j))
+                    for k in range(len(query[j]["tauts"])):
+                        sim = sim_dict[similarity](mols[i][fp_key], query[j][f"fp{k}"])
+                        if sim >= cutoff:
+                            int_simis.append(sim)
+                if int_simis:
+                    simis.append((max(int_simis), i, j))
+    else:
+        for j in query:
+            for i in mols:
+                sim = sim_dict[similarity](mols[i][fp_key], query[j]["fp"])
+                if sim >= cutoff:
+                    filt_mol = filter_res(mols[i][key], filter_dict)
+                    if filt_mol:
+                        simis.append((sim, i ,j))
     print(len(simis))
     grouped_simis = [sorted(list(group), reverse=True) for k, group in groupby(sorted(simis, key=lambda entry: entry[2]), lambda x: x[2])]
     print("---")
@@ -101,19 +147,30 @@ def sim(mols, query, key, cutoff, similarity, filter_dict, name):
     return results
 
 
-def sim_tver(mols, query, key, cutoff, similarity, filter_dict, name, tva, tvb):
+def sim_tver(mols, query, key, fp_key, cutoff, similarity, filter_dict, name, tva, tvb, mode):
     results = {}
     counter = 0
     simis = []
-    for j in query:
-        for i in mols:
-    # for i in mols:
-    #     for j in query:
-            sim = sim_dict[similarity](mols[i]["fp"], query[j]["fp"], tva, tvb)
-            if sim >= cutoff:
+    if mode == "all_tauts":
+        for j in query:
+            for i in mols:
+                int_simis = []
                 filt_mol = filter_res(mols[i][key], filter_dict)
                 if filt_mol:
-                    simis.append((sim, i, j))
+                    for k in range(len(query[j]["tauts"])):
+                        sim = sim_dict[similarity](mols[i][fp_key], query[j][f"fp{k}"])
+                        if sim >= cutoff:
+                            int_simis.append(sim)
+                if int_simis:
+                    simis.append((max(int_simis), i, j))
+    else:
+        for j in query:
+            for i in mols:
+                sim = sim_dict[similarity](mols[i][fp_key], query[j]["fp"], tva, tvb)
+                if sim >= cutoff:
+                    filt_mol = filter_res(mols[i][key], filter_dict)
+                    if filt_mol:
+                        simis.append((sim, i, j))
     print(len(simis))
     grouped_simis = [sorted(list(group), reverse=True) for k, group in
                      groupby(sorted(simis, key=lambda entry: entry[2]), lambda x: x[2])]
@@ -141,15 +198,28 @@ def sim_tver(mols, query, key, cutoff, similarity, filter_dict, name, tva, tvb):
     return results
 
 
-def sim_top(mols, query, key, top_hits, similarity, filter_dict, name):
+def sim_top(mols, query, key, fp_key, top_hits, similarity, filter_dict, name, mode):
     results = {}
     simis = []
-    for i in mols:
-        filt_mol = filter_res(mols[i][key], filter_dict)
-        if filt_mol:
-            for j in query:
-                sim = sim_dict[similarity](mols[i]["fp"], query[j]["fp"])
-                simis.append((sim, i, j))
+    if mode == "all_tauts":
+        for j in query:
+            for i in mols:
+                int_simis = []
+                filt_mol = filter_res(mols[i][key], filter_dict)
+                if filt_mol:
+                    for k in range(len(query[j]["tauts"])):
+                        sim = sim_dict[similarity](mols[i][fp_key], query[j][f"fp{k}"])
+                        int_simis.append(sim)
+                if int_simis:
+                    print(len(int_simis))
+                    simis.append((max(int_simis), i, j))
+    else:
+        for i in mols:
+            filt_mol = filter_res(mols[i][key], filter_dict)
+            if filt_mol:
+                for j in query:
+                    sim = sim_dict[similarity](mols[i][fp_key], query[j]["fp"])
+                    simis.append((sim, i, j))
     print(len(simis))
     grouped_simis = [list(group) for k, group in groupby(sorted(simis, key=lambda entry: entry[2]), lambda x: x[2])]
     print(len(grouped_simis))
@@ -171,15 +241,27 @@ def sim_top(mols, query, key, top_hits, similarity, filter_dict, name):
     return results
 
 
-def sim_top_tver(mols, query, key, top_hits, similarity, filter_dict, name, tva, tvb):
+def sim_top_tver(mols, query, key, fp_key, top_hits, similarity, filter_dict, name, tva, tvb, mode):
     results = {}
     simis = []
-    for i in mols:
-        filt_mol = filter_res(mols[i][key], filter_dict)
-        if filt_mol:
-            for j in query:
-                sim = sim_dict[similarity](mols[i]["fp"], query[j]["fp"], tva, tvb)
-                simis.append((sim, i, j))
+    if mode == "all_tauts":
+        for j in query:
+            for i in mols:
+                int_simis = []
+                filt_mol = filter_res(mols[i][key], filter_dict)
+                if filt_mol:
+                    for k in range(len(query[j]["tauts"])):
+                        sim = sim_dict[similarity](mols[i][fp_key], query[j][f"fp{k}"])
+                        int_simis.append(sim)
+                if int_simis:
+                    simis.append((max(int_simis), i, j))
+    else:
+        for i in mols:
+            filt_mol = filter_res(mols[i][key], filter_dict)
+            if filt_mol:
+                for j in query:
+                    sim = sim_dict[similarity](mols[i][fp_key], query[j]["fp"], tva, tvb)
+                    simis.append((sim, i, j))
     grouped_simis = [list(group) for k, group in groupby(sorted(simis, key=lambda entry: entry[2]), lambda x: x[2])]
     counter = 0
     for entry in grouped_simis:
@@ -202,9 +284,19 @@ def set_fp_mp(fps, mols):
         mols[entry[0]]["fp"] = entry[1]
 
 
+def set_fp_taut_mp(fps, mols):
+    for entry in fps:
+        mols[entry[0]][f"fp{entry[2]}"] = entry[1]
+
+
 def fp_rdkit_mp(mol, i, nBits):
     fp = Chem.RDKFingerprint(mol, fpSize=nBits)
     return (i, fp)
+
+
+def fp_rdkit_taut_mp(taut, i, k, nBits):
+    fp = Chem.RDKFingerprint(taut, fpSize=nBits)
+    return (i, fp, k)
 
 
 def fp_morgan_mp(mol, i, radius, features, chiral, nBits):
@@ -213,9 +305,20 @@ def fp_morgan_mp(mol, i, radius, features, chiral, nBits):
     return (i, fp)
 
 
+def fp_morgan_taut_mp(taut, i, k, radius, features, chiral, nBits):
+    fp = Chem.GetMorganFingerprintAsBitVect(taut, radius, nBits=nBits, useFeatures=features,
+                                            useChirality=chiral)
+    return (i, fp, k)
+
+
 def fp_atompairs_mp(mol, i, nBits, chiral):
     fp = Pairs.GetHashedAtomPairFingerprint(mol, nBits=nBits, includeChirality=chiral)
     return (i, fp)
+
+
+def fp_atompairs_taut_mp(taut, i, k, nBits, chiral):
+    fp = Pairs.GetHashedAtomPairFingerprint(taut, nBits=nBits, includeChirality=chiral)
+    return (i, fp, k)
 
 
 def fp_torsion_mp(mol, i, nBits, chiral):
@@ -223,6 +326,16 @@ def fp_torsion_mp(mol, i, nBits, chiral):
     return (i, fp)
 
 
+def fp_torsion_taut_mp(taut, i, k, nBits, chiral):
+    fp = Torsions.GetHashedTopologicalTorsionFingerprint(taut, nBits=nBits, includeChirality=chiral)
+    return (i, fp, k)
+
+
 def fp_maccs_mp(mol, i):
     fp = MACCSkeys.GenMACCSKeys(mol)
     return (i, fp)
+
+
+def fp_maccs_taut_mp(taut, i, k):
+    fp = MACCSkeys.GenMACCSKeys(taut)
+    return (i, fp, k)
