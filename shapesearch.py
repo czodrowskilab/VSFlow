@@ -104,7 +104,7 @@ def gen_query_conf_pfp(query: dict, num_confs: int, seed: int, max_confs, nthrea
         query[i]["confs"] = mol_conf
 
 
-def gen_query_conf_pfp_mp(mol, i, num_confs, seed, max_confs, nthreads, pharm_def):
+def gen_query_conf_pfp_mp(mol, i, num_confs, seed, max_confs, nthreads):
     params = Chem.ETKDGv3()
     params.useSmallRingTorsions = True
     params.useMacrocycleTorsions = True
@@ -138,7 +138,7 @@ def gen_query_conf_pfp_mp(mol, i, num_confs, seed, max_confs, nthreads, pharm_de
     return (i, mol_conf)
 
 
-def gen_query_pfp_mp(mol, i, pharm_def):
+def gen_query_pfp_mp(mol, i):
     mol_H = Chem.AddHs(mol, addCoords=True)
     # print("start1")
     # fp_mol = Generate.Gen2DFingerprint(mol_H, feat_factory[pharm_def], dMat=Chem.Get3DDistanceMatrix(mol_H, confId=-1))
@@ -191,13 +191,13 @@ def shape_search(mols, query, nthreads, align_method, dist, fp_simi, pharm_def, 
                                                                                         confId=max(shape_simis)[1]))
                         pfp_sim = sim(query[i]["fp_shape"][confid], fp_db, fp_simi, tva, tvb)
                         combo = (max_shape_sim + pfp_sim) / 2
-                        score.append((combo, max_shape_sim, pfp_sim, i, j, max(shape_simis)[1], Chem.Mol(mols[j]["confs"]), confid, mols[j]["pattern"]))
+                        score.append((combo, max_shape_sim, pfp_sim, i, j, max(shape_simis)[1], Chem.Mol(mols[j]["confs"]), confid, mols[j]["pattern"], query[i]["pattern"]))
                         print(counter)
                         counter += 1
     return score
 
 
-def shape_mp(db_mol, i, db_smi, query_mol, j, confid, nthreads, dist, fp_simi, tva, tvb, align_method, pharm_def):
+def shape_mp(db_mol, i, db_smi, query_mol, j, q_smi, confid, nthreads, dist, fp_simi, tva, tvb, align_method, pharm_def):
     #fp_q = query_fp[confid]
     fp_q = Generate.Gen2DFingerprint(query_mol, feat_factory[pharm_def],
                               dMat=Chem.Get3DDistanceMatrix(query_mol, confId=confid))
@@ -229,4 +229,5 @@ def shape_mp(db_mol, i, db_smi, query_mol, j, confid, nthreads, dist, fp_simi, t
                                               dMat=Chem.Get3DDistanceMatrix(db_mol, confId=max(shape_simis)[1]))
         pfp_sim = sim(fp_q, fp_db, fp_simi, tva, tvb)
         combo = (max_shape_sim + pfp_sim) / 2
-        return (combo, max_shape_sim, pfp_sim, j, i, max(shape_simis)[1], Chem.Mol(db_mol), confid, db_smi)
+        print(i)
+        return (combo, max_shape_sim, pfp_sim, j, i, max(shape_simis)[1], Chem.Mol(db_mol), confid, db_smi, q_smi)
