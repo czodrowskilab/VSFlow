@@ -4,6 +4,67 @@ from rdkit.Chem import AllChem as Chem
 from itertools import groupby
 from xlrd import open_workbook
 import gzip
+from urllib.request import urlopen
+import ssl
+
+
+def conv_smi(entry):
+    print(entry[0])
+    return {"mol": Chem.MolFromSmiles(entry[1]), "props": {"chembl_id": entry[0].decode()}}
+
+
+def req_chembl(nproc, pool):
+    gcontext = ssl.SSLContext()
+    r = urlopen("https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_28/chembl_28_chemreps.txt.gz", context=gcontext)
+    print("loaded")
+    fd = gzip.GzipFile(fileobj=r, mode="rb")
+    byte_cont = fd.readlines()
+    print("read")
+    print(byte_cont[1].split(b'\t'))
+    content = {}
+    print("convert")
+    for i in range(1, len(byte_cont)):
+        content[i] = byte_cont[i].split(b'\t')[:2]
+    print(content[1])
+    del byte_cont
+    if nproc:
+        sub = {}
+        preps = pool.map(conv_smi, [content[n] for n in content])
+        for i in range(len(preps)):
+            sub[i] = preps[i]
+        del preps
+        print(sub[1])
+    else:
+        sub = {}
+        for n in content:
+            print(n)
+            mol = Chem.MolFromSmiles(content[n][1])
+            if mol:
+                sub[n] = {"mol": mol, "props": {"chembl_id": content[n][0].decode()}}
+        print(sub[1])
+    del content
+    return sub
+    # sub = {}
+    # for i in range(1, len(byte_cont)):
+    #     print(i)
+    #     mol = Chem.MolFromSmiles(byte_cont[i][1])
+    #     if mol:
+    #         sub[i] = {"mol": mol, "pattern": byte_cont[i][1].decode(), "props": {"chembl_id": byte_cont[i][0].decode()}}
+    # content = byte_cont.decode()
+    # print("decoded")
+    # fd.close()
+    # print(content[:100])
+    # lines = content.split("\n")
+    # print(lines[0])
+    # sub = {}
+    # for i in range(1, len(lines)):
+    #     print(i)
+    #     line_split = lines[i].split("\t")
+    #     mol = Chem.MolFromSmiles(lines[i][1])
+    #     if mol:
+    #         sub[i] = {"mol": mol, "pattern": lines[i][1], "props": {"chembl_id": lines[i][0]}}
+    # print(sub[1])
+    # return sub
 
 
 def query_standardize(mol):
@@ -132,11 +193,15 @@ def read_sd(infile, mode, ntauts, gz=False):
     return sub
 
 
-def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=None, db=False):
+def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=None, db=False, gz=False):
     sub = {}
     mol_func = Chem.MolFromSmiles
-    with open(filename, "r") as file:
-        content = file.readlines()
+    if gz:
+        with gzip.open(filename, mode="rt") as inf:
+            content = inf.readlines()
+    else:
+        with open(filename, "r") as file:
+            content = file.readlines()
     if delimiter is None:
         test_del = [";", ",", "\t"]
         if len(content) > 1:
