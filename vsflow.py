@@ -277,12 +277,29 @@ def substruct(args):
     else:
         filter_dict = {}
     # check if output path is valid
-    if not os.path.exists(os.path.dirname(args.output)):
-        parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
+    if args.input:
+        if "/" in args.input:
+            if not os.path.exists(os.path.dirname(args.input)):
+                parser.exit(status=1, message=f"{args.input} is no valid path. Please check if you specified the correct path")
+    if "/" in args.database:
+        if not os.path.exists(os.path.dirname(args.database)):
+            parser.exit(status=1,
+                        message=f"{args.database} is no valid path. Please check if you specified the correct path")
+    if "/" in args.output:
+        if not os.path.exists(os.path.dirname(args.output)):
+            parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
     print(f"Loading database {args.database} ...")
     sub_time = time.time()
     # load database if database path is valid
-    mols = read_database(args)
+    if args.database == "chembl":
+        if args.nproc:
+            pool = mp.Pool(processes=args.nproc)
+            mols = read.req_chembl(args.nproc, pool)
+            pool.close()
+        else:
+            mols = read.req_chembl(args.nproc, None)
+    else:
+        mols = read_database(args)
     try:
         db_desc = mols.pop("config")
     except KeyError:
@@ -296,12 +313,8 @@ def substruct(args):
     # set mol used based on selected mode and database
     if db_desc:
         if db_desc[0] == "yes":
-            if args.mode == "std":
-                key = "mol_sta"
-            elif args.mode == "can_taut":
+            if args.mode == "can_taut":
                 key = "mol_can"
-            elif args.mode == "all_tauts":
-                key = "mol_sta"
             else:
                 key = "mol"
         else:
@@ -331,6 +344,7 @@ def substruct(args):
         if args.nproc:
             pool = mp.Pool(processes=args.nproc)
             if args.mode == "std" or args.mode == "can_taut" or args.mode == "no_std":
+                print("here")
                 sss.sss_mp(query, mols, key, filter_dict, results, pool)
             else:
                 sss.sss_mp_taut(query, mols, key, filter_dict, results, pool)
@@ -344,7 +358,6 @@ def substruct(args):
     sub_dur = sub_time_2 - sub_time
     print(sub_dur)
     print("Finished substructure search")
-    del mols
     # calculate properties if desired
     if args.properties:
         for i in results:
@@ -426,7 +439,7 @@ fp_sim.add_argument("-m", "--mode", help="choose a mode for similarity search [s
 fp_sim.add_argument("-np", "--nproc", type=int, help="Specify the number of processors used when the application is "
                                                       "run in multiprocessing mode.", metavar="")
 fp_sim.add_argument("-f", "--fingerprint", help="specify fingerprint to be used [rdkit, ecfp, fcfp, ap, tt, maccs], [default: fcfp]",
-                    choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs"], default="fcfp", metavar="")
+                    choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs", "from_db"], default="fcfp", metavar="")
 fp_sim.add_argument("-r", "--radius", help="specify radius of circular fingerprints ecfp and fcfp [default: 3]",
                     type=int, default=3, metavar="")
 fp_sim.add_argument("-nb", "--nbits", help="specify bit size of fingerprints [default: 4096]", type=int,
@@ -480,11 +493,24 @@ def fingerprint(args):
     else:
         filter_dict = {}
     # check if output path is valid
-    if not os.path.exists(os.path.dirname(args.output)):
-        parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
+    if args.input:
+        if "/" in args.input:
+            if not os.path.exists(os.path.dirname(args.input)):
+                parser.exit(status=1, message=f"{args.input} is no valid path. Please check if you specified the correct path")
+    if "/" in args.database:
+        if not os.path.exists(os.path.dirname(args.database)):
+            parser.exit(status=1,
+                        message=f"{args.database} is no valid path. Please check if you specified the correct path")
+    if "/" in args.output:
+        if not os.path.exists(os.path.dirname(args.output)):
+            parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
     print(f"Loading database {args.database} ...")
     sub_time = time.time()
     # load database if database path is valid
+    if args.fingerprint == "from_db":
+        if args.database.endswith(".sdf") or args.database.endswith(".sdf.gz"):
+            parser.exit(status=1, message="Fingerprints can not be read from an SD file. Use preparedb -f/--fibgerprint "
+                                          "to generate a database file containing fingerprints!")
     mols = read_database(args)
     try:
         db_desc = mols.pop("config")
@@ -499,22 +525,35 @@ def fingerprint(args):
     # set mol used based on selected parameters and database
     if db_desc:
         if db_desc[0] == "yes":
-            if args.mode == "std":
-                key = "mol_sta"
-            elif args.mode == "can_taut":
+            if args.mode == "can_taut":
                 key = "mol_can"
-            elif args.mode == "all_tauts":
-                key = "mol_sta"
+                fp_key = "fp_can"
             else:
                 key = "mol"
+                fp_key = "fp"
         else:
             key = "mol"
+            fp_key = "fp"
     else:
         key = "mol"
-    # Calculate fingerprints
+        fp_key = "fp"
+    # Calculate fingerprints based on selected parameters
     print("Calculating fingerprints ...")
     sub_time = time.time()
     features = False
+    print(args.fingerprint)
+    calc_db_fp = True
+    if args.fingerprint == "from_db":
+        if db_desc:
+            if db_desc[5]:
+                calc_db_fp = False
+                args.fingerprint = db_desc[5]
+                args.nbits = db_desc[6]
+                args.radius = db_desc[7]
+                args.no_chiral = db_desc[8]
+            else:
+                parser.exit(status=1, message=f"No fingerprints included in {args.database}. Use preparedb -f/--fingerprint to generate fps!")
+    print(args.fingerprint)
     if args.fingerprint == "fcfp" or args.fingerprint == "ecfp":
         if args.fingerprint == "fcfp":
             name = f"FCFP{args.radius * 2}-like Morgan {args.nbits} bits"
@@ -523,97 +562,146 @@ def fingerprint(args):
             name = f"ECFP{args.radius * 2}-like Morgan {args.nbits} bits"
         if args.nproc:
             pool = mp.Pool(processes=args.nproc)
-            argslist = [(mols[i][key], i, args.radius, features, args.no_chiral, args.nbits) for i in mols]
-            fps = pool.starmap(fpsearch.fp_morgan_mp, argslist)
-            fpsearch.set_fp_mp(fps, mols)
-            argslist = [(query[j]["mol"], j, args.radius, features, args.no_chiral, args.nbits) for j in query]
-            fps = pool.starmap(fpsearch.fp_morgan_mp, argslist)
-            fpsearch.set_fp_mp(fps, query)
+            if calc_db_fp:
+                argslist = [(mols[i][key], i, args.radius, features, args.no_chiral, args.nbits) for i in mols]
+                fps = pool.starmap(fpsearch.fp_morgan_mp, argslist)
+                fpsearch.set_fp_mp(fps, mols)
+            if args.mode == "all_tauts":
+                argslist = [(query[j]["tauts"][k], j, k, args.radius, features, args.no_chiral, args.nbits) for j in query for k in range(len(query[j]["tauts"]))]
+                fps = pool.starmap(fpsearch.fp_morgan_taut, argslist)
+                fpsearch.set_fp_mp(fps, mols)
+            else:
+                argslist = [(query[j]["mol"], j, args.radius, features, args.no_chiral, args.nbits) for j in query]
+                fps = pool.starmap(fpsearch.fp_morgan_mp, argslist)
+                fpsearch.set_fp_mp(fps, query)
             del argslist
             del fps
             pool.close()
         else:
-            fpsearch.fp_morgan(mols, key, args.radius, args.nbits, features, args.no_chiral)
-            fpsearch.fp_morgan(query, "mol", args.radius, args.nbits, features, args.no_chiral)
+            if calc_db_fp:
+                fpsearch.fp_morgan(mols, key, args.radius, args.nbits, features, args.no_chiral)
+            if args.mode == "all_tauts":
+                fpsearch.fp_morgan_taut(query, args.radius, args.nbits, features, args.no_chiral)
+            else:
+                fpsearch.fp_morgan(query, "mol", args.radius, args.nbits, features, args.no_chiral)
     elif args.fingerprint == "rdkit":
         name = f"RDKit {args.nbits} bits"
         if args.nproc:
             pool = mp.Pool(processes=args.nproc)
-            argslist = [(mols[i][key], i, args.nbits) for i in mols]
-            fps = pool.starmap(fpsearch.fp_rdkit_mp, argslist)
-            fpsearch.set_fp_mp(fps, mols)
-            argslist = [(query[j]["mol"], j, args.nbits) for j in query]
-            fps = pool.starmap(fpsearch.fp_rdkit_mp, argslist)
-            fpsearch.set_fp_mp(fps, query)
+            if calc_db_fp:
+                argslist = [(mols[i][key], i, args.nbits) for i in mols]
+                fps = pool.starmap(fpsearch.fp_rdkit_mp, argslist)
+                fpsearch.set_fp_mp(fps, mols)
+            if args.mode == "all_tauts":
+                argslist = [(query[j]["mol"][k], j, k, args.nbits) for j in query for k in range(len(query[j]["tauts"]))]
+                fps = pool.starmap(fpsearch.fp_rdkit_taut_mp, argslist)
+                fpsearch.set_fp_taut_mp(fps, query)
+            else:
+                argslist = [(query[j]["mol"], j, args.nbits) for j in query]
+                fps = pool.starmap(fpsearch.fp_rdkit_mp, argslist)
+                fpsearch.set_fp_mp(fps, query)
             del argslist
             del fps
             pool.close()
         else:
-            fpsearch.fp_rdkit(mols, key, args.nbits)
-            fpsearch.fp_rdkit(query, "mol", args.nbits)
+            if calc_db_fp:
+                fpsearch.fp_rdkit(mols, key, args.nbits)
+            if args.mode == "all_tauts":
+                fpsearch.fp_rdkit_taut(query, args.nbits)
+            else:
+                fpsearch.fp_rdkit(query, "mol", args.nbits)
     elif args.fingerprint == "ap":
         name = f"AtomPairs {args.nbits} bits"
         if args.nproc:
             pool = mp.Pool(processes=args.nproc)
-            argslist = [(mols[i][key], i, args.nbits, args.no_chiral) for i in mols]
-            fps = pool.starmap(fpsearch.fp_atompairs_mp, argslist)
-            fpsearch.set_fp_mp(fps, mols)
-            argslist = [(query[j]["mol"], j, args.nbits, args.no_chiral) for j in query]
-            fps = pool.starmap(fpsearch.fp_atompairs_mp, argslist)
-            fpsearch.set_fp_mp(fps, query)
+            if calc_db_fp:
+                argslist = [(mols[i][key], i, args.nbits, args.no_chiral) for i in mols]
+                fps = pool.starmap(fpsearch.fp_atompairs_mp, argslist)
+                fpsearch.set_fp_mp(fps, mols)
+            if args.mode == "all_tauts":
+                argslist = [(query[j]["mol"][k], j, k, args.nbits, args.no_chiral) for j in query for k in range(len(query[j]["tauts"]))]
+                fps = pool.starmap(fpsearch.fp_atompairs_taut_mp, argslist)
+                fpsearch.set_fp_taut_mp(fps, mols)
+            else:
+                argslist = [(query[j]["mol"], j, args.nbits, args.no_chiral) for j in query]
+                fps = pool.starmap(fpsearch.fp_atompairs_mp, argslist)
+                fpsearch.set_fp_mp(fps, query)
             del argslist
             del fps
             pool.close()
         else:
-            fpsearch.fp_atompairs(mols, key, args.nbits, args.no_chiral)
-            fpsearch.fp_atompairs(query, "mol", args.nbits, args.no_chiral)
+            if calc_db_fp:
+                fpsearch.fp_atompairs(mols, key, args.nbits, args.no_chiral)
+            if args.mode == "all_tauts":
+                fpsearch.fp_atompairs_taut(query, args.nbits, args.no_chiral)
+            else:
+                fpsearch.fp_atompairs(query, "mol", args.nbits, args.no_chiral)
     elif args.fingerprint == "tt":
         name = f"TopologicalTorsion {args.nbits} bits"
         if args.nproc:
             pool = mp.Pool(processes=args.nproc)
-            argslist = [(mols[i][key], i, args.nbits, args.no_chiral) for i in mols]
-            fps = pool.starmap(fpsearch.fp_torsion_mp, argslist)
-            fpsearch.set_fp_mp(fps, mols)
-            argslist = [(query[j]["mol"], j, args.nbits, args.no_chiral) for j in query]
-            fps = pool.starmap(fpsearch.fp_torsion_mp, argslist)
-            fpsearch.set_fp_mp(fps, query)
+            if calc_db_fp:
+                argslist = [(mols[i][key], i, args.nbits, args.no_chiral) for i in mols]
+                fps = pool.starmap(fpsearch.fp_torsion_mp, argslist)
+                fpsearch.set_fp_mp(fps, mols)
+            if args.mode == "all_tauts":
+                argslist = [(query[j]["mol"][k], j, k, args.nbits, args.no_chiral) for j in query for k in range(len(query[j]["tauts"]))]
+                fps = pool.starmap(fpsearch.fp_torsion_taut_mp, argslist)
+                fpsearch.set_fp_taut_mp(fps, mols)
+            else:
+                argslist = [(query[j]["mol"], j, args.nbits, args.no_chiral) for j in query]
+                fps = pool.starmap(fpsearch.fp_torsion_mp, argslist)
+                fpsearch.set_fp_mp(fps, query)
             del argslist
             del fps
             pool.close()
         else:
-            fpsearch.fp_torsion(mols, key, args.nbits, args.no_chiral)
-            fpsearch.fp_torsion(query, "mol", args.nbits, args.no_chiral)
+            if calc_db_fp:
+                fpsearch.fp_torsion(mols, key, args.nbits, args.no_chiral)
+            if args.mode == "all_tauts":
+                fpsearch.fp_torsion(query, "mol", args.nbits, args.no_chiral)
+            else:
+                fpsearch.fp_torsion_taut(query, args.nbits, args.no_chiral)
     else:
         name = "MACCS"
         if args.nproc:
             pool = mp.Pool(processes=args.nproc)
-            argslist = [(mols[i][key], i) for i in mols]
-            fps = pool.starmap(fpsearch.fp_maccs_mp, argslist)
-            fpsearch.set_fp_mp(fps, mols)
-            argslist = [(query[j]["mol"], j) for j in query]
-            fps = pool.starmap(fpsearch.fp_maccs_mp, argslist)
-            fpsearch.set_fp_mp(fps, query)
+            if calc_db_fp:
+                argslist = [(mols[i][key], i) for i in mols]
+                fps = pool.starmap(fpsearch.fp_maccs_mp, argslist)
+                fpsearch.set_fp_mp(fps, mols)
+            if args.mode == "all_tauts":
+                argslist = [(query[j]["mol"][k], j, k) for j in query for k in range(len(query[j]["tauts"]))]
+                fps = pool.starmap(fpsearch.fp_maccs_taut_mp, argslist)
+                fpsearch.set_fp_taut_mp(fps, query)
+            else:
+                argslist = [(query[j]["mol"], j) for j in query]
+                fps = pool.starmap(fpsearch.fp_maccs_mp, argslist)
+                fpsearch.set_fp_mp(fps, query)
             del argslist
             del fps
             pool.close()
         else:
-            fpsearch.fp_maccs(mols, key)
-            fpsearch.fp_maccs(query, "mol")
+            if calc_db_fp:
+                fpsearch.fp_maccs(mols, key)
+            if args.mode == "all_tauts":
+                fpsearch.fp_maccs_taut(mols)
+            else:
+                fpsearch.fp_maccs(query, "mol")
     # Calculate similarities
     print("Calculating similarities ...")
     if args.cutoff:
         if args.similarity == "tver":
-            results = fpsearch.sim_tver(mols, query, key, args.cutoff, args.similarity, filter_dict, name,
-                                        args.tver_alpha, args.tver_beta)
+            results = fpsearch.sim_tver(mols, query, key, fp_key, args.cutoff, args.similarity, filter_dict, name,
+                                        args.tver_alpha, args.tver_beta, args.mode)
         else:
-            results = fpsearch.sim(mols, query, key, args.cutoff, args.similarity, filter_dict, name)
+            results = fpsearch.sim(mols, query, key, fp_key, args.cutoff, args.similarity, filter_dict, name, args.mode)
     else:
         if args.similarity == "tver":
-            results = fpsearch.sim_top_tver(mols, query, key, args.top_hits, args.similarity, filter_dict, name,
-                                            args.tver_alpha, args.tver_beta)
-            print(len(results))
+            results = fpsearch.sim_top_tver(mols, query, key, fp_key, args.top_hits, args.similarity, filter_dict, name,
+                                            args.tver_alpha, args.tver_beta, args.mode)
         else:
-            results = fpsearch.sim_top(mols, query, key, args.top_hits, args.similarity, filter_dict, name)
+            results = fpsearch.sim_top(mols, query, key, fp_key, args.top_hits, args.similarity, filter_dict, name, args.mode)
     sub_time_2 = time.time()
     sub_dur = sub_time_2 - sub_time
     print(sub_dur)
@@ -728,7 +816,7 @@ shape_sim.add_argument("--tver_beta", help="specify beta parameter (weighs query
 shape_sim.add_argument("--pdf", action="store_true", help="generate a pdf file for all results")
 shape_sim.add_argument("--pymol", action="store_true", help="generate PyMOL file with 3D conformations for results")
 shape_sim.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
-                                         "not automatically recognized", metavar="")
+                                            "not automatically recognized", metavar="")
 shape_sim.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
 
 
@@ -754,8 +842,17 @@ def shape(args):
     else:
         nthreads = 1
     # check if output path is valid
-    if not os.path.exists(os.path.dirname(args.output)):
-        parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
+    if args.input:
+        if "/" in args.input:
+            if not os.path.exists(os.path.dirname(args.input)):
+                parser.exit(status=1, message=f"{args.input} is no valid path. Please check if you specified the correct path")
+    if "/" in args.database:
+        if not os.path.exists(os.path.dirname(args.database)):
+            parser.exit(status=1,
+                        message=f"{args.database} is no valid path. Please check if you specified the correct path")
+    if "/" in args.output:
+        if not os.path.exists(os.path.dirname(args.output)):
+            parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
     mols = {}
     # load database
     if args.database in db_config:
@@ -773,8 +870,8 @@ def shape(args):
                 try:
                     mols = pickle.load(open(args.database, "rb"))
                 except:
-                    parser.exit(status=1, message=f"{args.database} could not be opened. Please make sure the file has the correct "
-                                               f"format")
+                    parser.exit(status=1, message=f"{args.database} could not be opened. Please make sure the file "
+                                                  f"has the correct format")
             elif args.database.endswith(".sdf"):
                 if args.nproc:
                     mols, _ = read.read_sd_mp(args.database, pool=mp.Pool(processes=args.nproc), mode="3d")
@@ -790,14 +887,14 @@ def shape(args):
                 if not mols:
                     parser.exit(status=1, message="No molecules with 3D coordinates could be read from SD file !")
             else:
-                parser.exit(status=1, message="Database file must have format .vsdb or .sdf/.sdf.gz. Use mode preparedb to prepare a database for"
-                                     " shape similarity screening.")
+                parser.exit(status=1, message="Database file must have format .vsdb or .sdf/.sdf.gz. "
+                                              "Use mode preparedb to prepare a database for shape similarity screening.")
         else:
             parser.exit(status=1, message=f"{args.database} could not be opened. "
-                                 f"Please make sure you specified the correct path")
+                                          f"Please make sure you specified the correct path")
     try:
         db_desc = mols.pop("config")
-        seed = db_desc[3]
+        seed = db_desc[4]
         if seed is None:
             if args.seed:
                 seed = args.seed
@@ -822,7 +919,22 @@ def shape(args):
             query = read.read_excel(args.input, args.mol_column, mode="std", ntauts=None)
     if not query:
         parser.exit(status=1, message="No molecules could be read from input file")
+    # group query molecules if they are continuous and have the same canonical SMILES
+    confs = [(query[i]["mol"], i, query[i]["pattern"]) for i in query if query[i]["mol"].GetConformer().Is3D()]
+    if confs:
+        print(len(confs))
+        gr_confs = [list(group) for k, group in groupby(confs, lambda x: x[2])]
+        print(len(gr_confs))
+        print(gr_confs)
+        # combine conformers if they belong to the same molecule, consider them as one query with different conformers
+        for gr in gr_confs:
+            if len(gr) > 1:
+                for i in range(1, len(gr)):
+                    query[gr[0][1]]["mol"].AddConformer(query[gr[i][1]]["mol"].GetConformer(), assignId=True)
+                    query.pop(i)
     print(query)
+    print(query[0]["mol"].GetNumConformers())
+    print(query[0]["mol"].GetConformer(1))
     # perform shape screening with specified parameters
     search_start = time.time()
     if args.nproc:
@@ -833,10 +945,10 @@ def shape(args):
         else:
             if args.input.endswith(".csv") or args.input.endswith(".xlsx") or args.input.endswith(".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv"):
                 mol3d_list = []
-                mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query]
+                mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads) for i in query]
             else:
-                mol3d_list = [(query[i]["mol"], i, args.pharm_feats) for i in query if query[i]["mol"].GetConformer().Is3D()]
-                mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query if
+                mol3d_list = [(query[i]["mol"], i) for i in query if query[i]["mol"].GetConformer().Is3D()]
+                mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads) for i in query if
                               query[i]["mol"].GetConformer().Is3D() is False]
         if mol2d_list:
             print(f"Generating 3D conformer(s) for {len(mol2d_list)} query molecule(s)")
@@ -851,9 +963,11 @@ def shape(args):
                 query[entry[0]]["confs"] = entry[1]
             del query_confs
         algs = pool_shape.starmap(shapesearch.shape_mp, [(mols[i]["confs"], i, mols[i]["pattern"], query[j]["confs"], j,
-                                                               k, nthreads, args.shape_simi, args.fp_simi, args.tver_alpha, args.tver_beta, args.align_method, args.pharm_feats) for i in mols for j
-                                                              in query for k in
-                                                              range(query[j]["confs"].GetNumConformers()) if "confs" in mols[i]])
+                                                          query[j]["pattern"], k, nthreads, args.shape_simi,
+                                                          args.fp_simi, args.tver_alpha, args.tver_beta,
+                                                          args.align_method, args.pharm_feats) for i in mols for j in
+                                                          query for k in range(query[j]["confs"].GetNumConformers())
+                                                          if "confs" in mols[i]])
         algs = [entry for entry in algs if entry]
         pool_shape.close()
     else:
@@ -864,7 +978,8 @@ def shape(args):
     print(search_time)
     # sort results
     print("Filtering and sorting results...")
-    grouped_algs = [res for res in (list(group) for k, group in groupby(sorted(algs, key=lambda entry: entry[3]), lambda x: x[3]))]
+    grouped_algs = [res for res in (list(group) for k, group in groupby(sorted(algs, key=lambda entry: entry[9]), lambda x: x[9]))]
+    print(len(grouped_algs))
     grouped = []
     if args.score == "combo":
         sort_score = 0
@@ -919,14 +1034,14 @@ shape_sim.set_defaults(func=shape)
 
 ## prepare databases for screening
 
-prepare_db = subparsers.add_parser("preparedb")
-prepare_db.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx] (required)", required=True, metavar="infile")
+prepare_db = subparsers.add_parser("preparedb", description="prepare databases for virtual screening")
+prep_group = prepare_db.add_mutually_exclusive_group()
+prepare_db.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx]", required=True, metavar="infile")
 prepare_db.add_argument("-o", "--output", default="prep_database.vsdb", help="specify name of output file [default: prep_database.vsdb]",
                    metavar="")
-prepare_db.add_argument("-int", "--integrate", help="specify shortcut for database; saves database to $HOME/VSFlow_Databases", metavar="")
-prepare_db.add_argument("-intg", "--int_global", help="stores database in {path_to_script}/Databases instead of $HOME/VSFlow_Databases, "
-                                                 "can only be specified together with --integrate flag",
-                   action="store_true")
+prep_group.add_argument("-int", "--integrate", help="specify shortcut for database; saves database to $HOME/VSFlow_Databases", metavar="")
+prep_group.add_argument("-intg", "--int_global", help="specify shortcut for database, stores database within the repository folder",
+                   metavar="")
 prepare_db.add_argument("-s", "--standardize", help="standardizes molecules, removes salts and associated charges",
                    action="store_true")
 prepare_db.add_argument("-c", "--conformers", help="generates multiple 3D conformers, required for mode shape",
@@ -946,6 +1061,13 @@ prepare_db.add_argument("--header", help="Specify number of row in csv/xlsx cont
 prepare_db.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
                                          "not automatically recognized", metavar="")
 prepare_db.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
+prepare_db.add_argument("-f", "--fingerprint", help="specify fingerprint to be used [rdkit, ecfp, fcfp, ap, tt, maccs]",
+                    choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs"], metavar="")
+prepare_db.add_argument("-r", "--radius", help="specify radius of circular fingerprints ecfp and fcfp [default: 2]",
+                    type=int, default=2, metavar="")
+prepare_db.add_argument("-nb", "--nbits", help="specify bit size of fingerprints [default: 2048]", type=int,
+                    default=2048, metavar="")
+prepare_db.add_argument("--no_chiral", help="specify if chirality should not be considered", action="store_false")
 
 
 def prep_db(args):
@@ -979,24 +1101,10 @@ def prep_db(args):
         nthreads = 0
     else:
         nthreads = 1
-    # check if output path is valid
-    if not os.path.exists(os.path.dirname(args.output)):
-        parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
-    # check
-    if args.integrate:
-        db_name = args.integrate
-        if args.int_global:
-            db_path = config["global_db"]
-            try:
-                if os.path.exists(db_path):
-                    with open(f"{db_path}/.test", "w") as test_file:
-                        test_file.write("")
-                else:
-                    os.mkdir(db_path)
-            except PermissionError:
-                parser.exit(status=2, message="You do not have the permission to integrate a database globally. Please contact "
-                                    "your system administrator or re-run with sudo permissions !")
-        else:
+    # check name of already integrated databases
+    if args.integrate or args.int_global:
+        if args.integrate:
+            db_name = args.integrate
             db_path = config["local_db"]
             try:
                 if os.path.exists(db_path):
@@ -1009,7 +1117,20 @@ def prep_db(args):
                 parser.exit(status=2, message="Permission denied")
             except OSError:
                 parser.exit(status=2, message="Permission denied")
-        if args.integrate in db_config:
+        else:
+            db_name = args.int_global
+            db_path = config["global_db"]
+            try:
+                if os.path.exists(db_path):
+                    with open(f"{db_path}/.test", "w") as test_file:
+                        test_file.write("")
+                else:
+                    os.mkdir(db_path)
+            except PermissionError:
+                parser.exit(status=2,
+                            message="You do not have the permission to integrate a database globally. Please contact "
+                                    "your system administrator or re-run with sudo permissions !")
+        if db_name in db_config:
             choice = input(
                 f"A database with name {db_name} is already integrated in VSFlow. Press 'o' to override the database, "
                 f"press 'n' to choose a new name for the database or press 'c' to cancel and exit.")
@@ -1017,39 +1138,46 @@ def prep_db(args):
                 choice = input("Press 'o' to override the database, press 'n' to choose a new name for the "
                                 "database or press 'c' to cancel and exit.")
             if choice == "o":
-                try:
-                    test_load = pickle.load(open(f"{config['global_db']}/{args.integrate}", "rb"))
-                    del test_load
-                    with open(f"{config['global_db']}/.test", "w") as test_file:
-                        test_file.write("")
-                except FileNotFoundError:
-                    pass
-                except PermissionError:
-                    sec_choice = input(f"You do not have the permission to change the database {args.integrate}. Please contact "
-                          f"your system administrator or run again with sudo. Press 'c' to cancel or press 'n' to "
-                          f"enter a different name")
-                    while sec_choice != "n" and sec_choice != "c":
-                        sec_choice = input(f"Press 'c' to cancel or press 'n' to enter a different name")
-                    if sec_choice == "n":
-                        db_name = input("Please enter different name:")
-                        while db_name == args.integrate:
-                            db_name = input("Please enter different name:")
-                    else:
-                        exit()
+                pass
+                # try:
+                #     test_load = pickle.load(open(f"{config['global_db']}/{db_name}", "rb"))
+                #     del test_load
+                #     with open(f"{config['global_db']}/.test", "w") as test_file:
+                #         test_file.write("")
+                # except FileNotFoundError:
+                #     pass
+                # except PermissionError:
+                #     sec_choice = input(f"You do not have the permission to change the database {db_name}. Please contact "
+                #           f"your system administrator or run again with sudo. Press 'c' to cancel or press 'n' to "
+                #           f"enter a different name")
+                #     while sec_choice != "n" and sec_choice != "c":
+                #         sec_choice = input(f"Press 'c' to cancel or press 'n' to enter a different name")
+                #     if sec_choice == "n":
+                #         db_name_new = input("Please enter different name:")
+                #         while db_name == args.integrate:
+                #             db_name = input("Please enter different name:")
+                #     else:
+                #         exit()
             elif choice == "n":
-                db_name = input("Please enter different name:")
-                while db_name == args.integrate:
+                db_name_new = input("Please enter different name:")
+                while db_name == db_name_new:
                     db_name = input("Please enter different name:")
+                db_name = db_name_new
             else:
-                exit()
+                parser.exit(status=0)
         out_path = f"{db_path}/{db_name}.vsdb"
     else:
+        if "/" in args.output:
+            if not os.path.exists(os.path.dirname(args.output)):
+                parser.exit(status=1,
+                            message=f"{args.output} is no valid path. Please check if you specified the correct path")
         if args.output.endswith(".vsdb"):
             out_path = args.output
         else:
             out_path = f"{args.output}.vsdb"
     standardized = "no"
-    conformers = "no"
+    conformers = 0
+    fp_name = "no"
     seed = None
     # read input file
     if args.input.endswith(".sdf"):
@@ -1064,59 +1192,167 @@ def prep_db(args):
             mols, failed = read.read_prepare_db_from_sd(args.input, gz=False)
     elif args.input.endswith(".xlsx"):
         mols = read.read_excel(args.input, args.mol_column, header=args.header, db=True)
-    elif args.input.endswith(".csv") or args.input.endswith(".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv"):
+    elif args.input.endswith(".csv") or args.input.endswith(".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv") or args.input.endswith(".txt"):
         mols = read.read_csv(args.input, args.mol_column, args.delimiter, header=args.header, db=True)
+    elif args.input.endswith(".csv.gz") or args.input.endswith(".tsv.gz") or args.input.endswith(".txt.gz"):
+        mols = read.read_csv(args.input, args.mol_column, args.delimiter, header=args.header, db=True, gz=True)
     else:
         mols, failed = {}, []
         parser.exit(status=2, message="File format not supported")
     #print(f"{len(failed)} molecules out of {len(mols)} could not be processed")
     print(f"Finished reading input file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    # standardize molecules
     if args.standardize:
         standardized = "yes"
         if args.nproc:
             data_can = can_pool.starmap(prepare.do_standard_mp,
                                         [(mols[n]["mol"], n, args.max_tauts) for n in mols])
             for entry in data_can:
-                mols[entry[0]]["mol_sta"] = entry[1]
+                mols[entry[0]]["mol"] = entry[1]
                 mols[entry[0]]["mol_can"] = entry[2]
         else:
             prepare.do_standard(mols, args.max_tauts)
         print(f"Finished standardizing molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    # generate fingerprints
+    if args.fingerprint:
+        fp_shortcut = args.fingerprint
+        fp_size = args.nbits
+        fp_radius = args.radius
+        fp_chiral = args.no_chiral
+        print("Generating fingerprints ...")
+        if args.fingerprint == "fcfp" or args.fingerprint == "ecfp":
+            if args.fingerprint == "fcfp":
+                fp_name = f"FCFP{args.radius * 2}-like Morgan {args.nbits} bits"
+                features = True
+            else:
+                fp_name = f"ECFP{args.radius * 2}-like Morgan {args.nbits} bits"
+                features = False
+            if args.nproc:
+                if args.standardize:
+                        fps = can_pool.starmap(prepare.fp_morgan_std_mp, [(mols[n]["mol"], mols[n]["mol_can"], n, args.radius, features, args.no_chiral, args.nbits) for n in mols])
+                        for fpt in fps:
+                            mols[fpt[0]]["fp"] = fpt[1]
+                            mols[fpt[0]]["fp_can"] = fpt[2]
+                else:
+                    fps = can_pool.starmap(fpsearch.fp_morgan_mp, [(mols[n]["mol"], n, args.radius, features, args.no_chiral, args.nbits) for n in mols])
+                    for fpt in fps:
+                        mols[fpt[0]]["fp"] = fpt[1]
+            else:
+                if args.standardize:
+                    prepare.fp_morgan_std(mols, args.radius, features, args.no_chiral, args.nbits)
+                else:
+                    fpsearch.fp_morgan(mols, "mol", args.radius, features, args.no_chiral, args.nbits)
+        elif args.fingerprint == "rdkit":
+            fp_name = f"RDKit {args.nbits} bits"
+            if args.nproc:
+                if args.standardize:
+                    fps = can_pool.starmap(prepare.fp_rdkit_std_mp, [
+                        (mols[n]["mol"], mols[n]["mol_can"], n, args.nbits) for n in mols])
+                    for fpt in fps:
+                        mols[fpt[0]]["fp"] = fpt[1]
+                        mols[fpt[0]]["fp_can"] = fpt[2]
+                else:
+                    fps = can_pool.starmap(fpsearch.fp_rdkit_mp, [(mols[n]["mol"], n, args.nbits) for n in n_mols])
+                    for fpt in fps:
+                        mols[fpt[0]]["fp"] = fpt[1]
+            else:
+                if args.standardize:
+                    prepare.fp_rdkit_std(mols, args.nbits)
+                else:
+                    fpsearch.fp_rdkit(mols, "mol", args.nbits)
+        elif args.fingerprint == "tt":
+            fp_name = f"TopologicalTorsion {args.nbits} bits"
+            if args.nproc:
+                if args.standardize:
+                    fps = can_pool.starmap(prepare.fp_tt_std_mp, [(mols[n]["mol"], mols[n]["mol_can"], n, args.nbits, args.no_chiral) for n in mols])
+                    for fpt in fps:
+                        mols[fpt[0]]["fp"] = fpt[1]
+                        mols[fpt[0]]["fp_can"] = fpt[2]
+                else:
+                    fps = can_pool.starmap(fpsearch.fp_torsion_mp, [(mols[n]["mol"], n, args.nbits, args.no_chiral) for n in n_mols])
+                    for fpt in fps:
+                        mols[fpt[0]]["fp"] = fpt[1]
+            else:
+                if args.standardize:
+                    prepare.fp_tt_std(mols, args.nbits, args.no_chiral)
+                else:
+                    fpsearch.fp_torsion(mols, "mol", args.nbits, args.no_chiral)
+        elif args.fingerprint == "ap":
+            fp_name = f"AtomPairs {args.nbits} bits"
+            if args.nproc:
+                if args.standardize:
+                    fps = can_pool.starmap(prepare.fp_ap_std_mp, [(mols[n]["mol"], mols[n]["mol_can"], n, args.nbits, args.no_chiral) for n in mols])
+                    for fpt in fps:
+                        mols[fpt[0]]["fp"] = fpt[1]
+                        mols[fpt[0]]["fp_can"] = fpt[2]
+                else:
+                    fps = can_pool.starmap(fpsearch.fp_atompairs_mp, [(mols[n]["mol"], n, args.nbits, args.no_chiral) for n in n_mols])
+                    for fpt in fps:
+                        mols[fpt[0]]["fp"] = fpt[1]
+            else:
+                if args.standardize:
+                    prepare.fp_ap_std(mols, args.nbits, args.chiral)
+                else:
+                    fpsearch.fp_atompairs(mols, "mol", args.nbits, args.no_chiral)
+        else:
+            fp_name = "MACCS"
+            if args.nproc:
+                if args.standardize:
+                    fps = can_pool.starmap(prepare.fp_maccs_std_mp, [(mols[n]["mol"], mols[n]["mol_can"], n) for n in mols])
+                    for fpt in fps:
+                        mols[fpt[0]]["fp"] = fpt[1]
+                        mols[fpt[0]]["fp_can"] = fpt[2]
+                else:
+                    fps = can_pool.starmap(fpsearch.fp_maccs_mp, [(mols[n]["mol"], n) for n in n_mols])
+                    for fpt in fps:
+                        mols[fpt[0]]["fp"] = fpt[1]
+            else:
+                if args.standardize:
+                    prepare.fp_maccs_std(mols)
+                else:
+                    fpsearch.fp_maccs(mols, "mol")
+    # generate conformers
     if args.conformers:
-        conformers = "yes"
-        for i in mols:
-            try:
-                mol = mols[i]["mol_sta"]
-                key = "mol_sta"
-            except KeyError:
-                key = "mol"
-            break
-        print(key)
+        if args.rms_thresh:
+            conformers = f"max. {args.nconfs}"
+        else:
+            conformers = args.nconfs
+            args.rms_thresh = -1
+        # for i in mols:
+        #     try:
+        #         mol = mols[i]["mol_sta"]
+        #         key = "mol_sta"
+        #     except KeyError:
+        #         key = "mol"
+        #     break
+        # print(key)
         if args.seed:
             seed = args.seed
         else:
             seed = random.randint(0, 10000)
         if args.nproc:
-            confs = can_pool.starmap(prepare.gen_confs_mp, [(mols[i][key], i, args.nconfs, seed, nthreads) for i in mols])
+            confs = can_pool.starmap(prepare.gen_confs_mp, [(mols[i]["mol"], i, args.nconfs, seed, args.rms_thresh, nthreads) for i in mols])
             for entry in confs:
                 mols[entry[1]]["confs"] = entry[0]
                 mols[entry[1]]["pattern"] = entry[2]
         else:
-            prepare.gen_confs(mols, args.nconfs, seed, key, nthreads)
-    for i in mols:
-        if "confs" in mols[i]:
-            conformers = "yes"
-        break
-    mols["config"] = [standardized, conformers, len(mols), seed]
+            prepare.gen_confs(mols, args.nconfs, seed, args.rms_thresh, "mol", nthreads)
+    else:
+        for i in mols:
+            if "confs" in mols[i]:
+                conformers = 1
+            break
+    mols["config"] = [standardized, conformers, fp_name, len(mols), seed, args.fingerprint, args.nbits, args.radius,
+                      args.no_chiral]
     pickle.dump(mols, open(out_path, "wb"))
     if args.integrate:
         db_config[db_name] = [time.ctime(os.path.getmtime(out_path)),
                               standardized,
                               conformers,
-                              len(mols),
-                              seed]
+                              fp_name,
+                              len(mols) - 1]
         pickle.dump(db_config, open(f"{home}/.vsflow/.db_config", "wb"))
-        print(f"{args.input} was integrated as database {db_name} in VSFlow. You can now search the database calling -db "
+        print(f"{args.input} was integrated as database  with shortcut '{db_name}' in VSFlow. You can now search the database calling -d/--database "
               f"{db_name}.")
     try:
         can_pool.close()
@@ -1142,14 +1378,16 @@ def get_db(args):
     db_shortcut = ["shortcut"]
     db_create = ["created"]
     db_standard = ["standardized"]
-    db_conformers = ["conformers"]
+    db_conformers = ["conformers/cpd"]
+    db_fps = ["fingerprints"]
     db_length = ["number of cpds"]
     for db in db_config:
         db_shortcut.append(db)
         db_create.append(db_config[db][0])
         db_standard.append(db_config[db][1])
         db_conformers.append(str(db_config[db][2]))
-        db_length.append(db_config[db][3])
+        db_fps.append(db_config[db][3])
+        db_length.append(db_config[db][4])
     default_db = pickle.load(open(f"{home}/.vsflow/.db_default", "rb"))
     if args.default:
         if args.default in db_shortcut:
@@ -1169,7 +1407,7 @@ def get_db(args):
                       #f"{db_source[i]}" + " " * (max([len(string) for string in db_source]) + 5 - len(db_source[i])) +
                       f"{db_standard[i]}" + " " * (max([len(string) for string in db_standard]) + 5 - len(db_standard[i])) +
                       f"{db_conformers[i]}" + " " * (max([len(string) for string in db_conformers]) + 5 - len(db_conformers[i])) +
-                      #f"{db_all_tauts[i]}" + " " * (max([len(string) for string in db_all_tauts]) + 5 - len(db_all_tauts[i])) +
+                      f"{db_fps[i]}" + " " * (max([len(string) for string in db_fps]) + 5 - len(db_fps[i])) +
                       f"{db_length[i]}")
                 print('\033[0m')
             else:
@@ -1178,14 +1416,14 @@ def get_db(args):
                       #f"{db_source[i]}" + " " * (max([len(string) for string in db_source]) + 5 - len(db_source[i])) +
                       f"{db_standard[i]}" + " " * (max([len(string) for string in db_standard]) + 5 - len(db_standard[i])) +
                       f"{db_conformers[i]}" + " " * (max([len(string) for string in db_conformers]) + 5 - len(db_conformers[i])) +
-                      #f"{db_all_tauts[i]}" + " " * (max([len(string) for string in db_all_tauts]) + 5 - len(db_all_tauts[i])) +
+                      f"{db_fps[i]}" + " " * (max([len(string) for string in db_fps]) + 5 - len(db_fps[i])) +
                       f"{db_length[i]}")
 
         print("\n")
         print('\033[1m')
         print(f"Default database: {default_db}")
         print('\033[0m')
-        print("You can set (or change) a default database by calling managedb --default {shortcut}")
+        print("You can set (or change) the default database with --default {shortcut} argument")
     if args.remove:
         if args.remove in db_config:
             choice = input(f"Are you sure you want to remove {args.remove} ? [y/n]")
