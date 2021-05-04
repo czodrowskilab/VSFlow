@@ -1,21 +1,22 @@
-from molvs.tautomer import TautomerCanonicalizer, TautomerEnumerator
-from molvs.standardize import Standardizer
-from rdkit.Chem import AllChem as Chem
-from itertools import groupby
-from xlrd import open_workbook
 import gzip
-from urllib.request import urlopen
 import ssl
+from itertools import groupby
+from urllib.request import urlopen
+
+from molvs.standardize import Standardizer
+from molvs.tautomer import TautomerCanonicalizer, TautomerEnumerator
+from rdkit.Chem import AllChem as Chem
+from xlrd import open_workbook
 
 
 def conv_smi(entry):
-    print(entry[0])
     return {"mol": Chem.MolFromSmiles(entry[1]), "props": {"chembl_id": entry[0].decode()}}
 
 
 def req_chembl(nproc, pool):
     gcontext = ssl.SSLContext()
-    r = urlopen("https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_28/chembl_28_chemreps.txt.gz", context=gcontext)
+    r = urlopen("https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_28/chembl_28_chemreps.txt.gz",
+                context=gcontext)
     print("loaded")
     fd = gzip.GzipFile(fileobj=r, mode="rb")
     byte_cont = fd.readlines()
@@ -116,7 +117,7 @@ def read_smiles(smiles, mode, ntauts):
             if mol:
                 frags = Chem.GetMolFrags(mol, asMols=True)
                 frag_max = max(frags, key=lambda m: m.GetNumAtoms())
-                #sub[i] = (frag_max, smiles[i])
+                # sub[i] = (frag_max, smiles[i])
                 sub[i] = {"mol": frag_max, "pattern": smiles[i]}
     return sub
 
@@ -336,7 +337,7 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                         if mol:
                             props = {}
                             for i in range(len(proc_content[n])):
-                                #props = {name: proc_content[n][smi_pos]}
+                                # props = {name: proc_content[n][smi_pos]}
 
                                 props[i] = proc_content[n][i]
                             sub[n] = {"mol": mol, "pattern": proc_content[n][smi_pos], "props": props}
@@ -527,7 +528,8 @@ def read_excel(filename, smiles_column, mode="std", ntauts=100, header=None, db=
                                 mol = mol_func(smi)
                                 if mol:
                                     mol_std = query_enumerate(mol, ntauts)
-                                    sub[i] = {"mol": mol_std[0], "pattern": sheet.row(i)[smi_pos].value, "tauts": mol_std[1]}
+                                    sub[i] = {"mol": mol_std[0], "pattern": sheet.row(i)[smi_pos].value,
+                                              "tauts": mol_std[1]}
                         except IndexError:
                             continue
             else:
@@ -549,7 +551,8 @@ def read_file(filename, smiles_column, delimiter, mode, ntauts, smarts=False):
         sub = read_sd(filename, mode, ntauts)
     elif filename.endswith(".sdf.gz"):
         sub = read_sd(filename, mode, ntauts, gz=True)
-    elif filename.endswith(".csv") or filename.endswith(".smi") or filename.endswith(".ich") or filename.endswith(".tsv"):
+    elif filename.endswith(".csv") or filename.endswith(".smi") or filename.endswith(".ich") or filename.endswith(
+            ".tsv"):
         sub = read_csv(filename, smiles_column, delimiter, mode, ntauts)
     elif filename.endswith(".xlsx"):
         sub = read_excel(filename, smiles_column, mode, ntauts)
