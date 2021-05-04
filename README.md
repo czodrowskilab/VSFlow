@@ -1,4 +1,4 @@
-# VSFlow 
+# VSFlow - Virtual Screening Workflow
 
 VSFlow is an open-source command-line tool built on top of the RDKit [1] for the ligand-based virtual screening 
 of large compound libraries (databases). It includes a substructure-based, a fingerprint-based 
