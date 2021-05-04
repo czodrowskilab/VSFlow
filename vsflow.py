@@ -82,9 +82,6 @@ for entry in to_remove:
 pickle.dump(config, open(f"{home}/.vsflow/.config", "wb"))
 pickle.dump(db_config, open(f"{home}/.vsflow/.db_config", "wb"))
 pickle.dump(db_default, open(f"{home}/.vsflow/.db_default", "wb"))
-print(config)
-print(db_config)
-print(db_default)
 parser = argparse.ArgumentParser(description="Virtual Screening Workflow")
 print('''\
 **************************
@@ -856,6 +853,7 @@ def shape(args):
                                           f"Please make sure you specified the correct path")
     try:
         db_desc = mols.pop("config")
+        print(db_desc)
         seed = db_desc[4]
         if seed is None:
             if args.seed:
@@ -882,27 +880,23 @@ def shape(args):
     if not query:
         parser.exit(status=1, message="No molecules could be read from input file")
     # group query molecules if they are continuous and have the same canonical SMILES
-    confs = [(query[i]["mol"], i, query[i]["pattern"]) for i in query if query[i]["mol"].GetConformer().Is3D()]
-    if confs:
-        print(len(confs))
-        gr_confs = [list(group) for k, group in groupby(confs, lambda x: x[2])]
-        print(len(gr_confs))
-        print(gr_confs)
-        # combine conformers if they belong to the same molecule, consider them as one query with different conformers
-        for gr in gr_confs:
-            if len(gr) > 1:
-                for i in range(1, len(gr)):
-                    query[gr[0][1]]["mol"].AddConformer(query[gr[i][1]]["mol"].GetConformer(), assignId=True)
-                    query.pop(i)
-    print(query)
-    print(query[0]["mol"].GetNumConformers())
-    print(query[0]["mol"].GetConformer(1))
+    if args.input:
+        if args.input.endswith(".sdf") or args.input.endswith(".sdf.gz"):
+            confs = [(query[i]["mol"], i, query[i]["pattern"]) for i in query if query[i]["mol"].GetConformer().Is3D()]
+            if confs:
+                gr_confs = [list(group) for k, group in groupby(confs, lambda x: x[2])]
+                # combine conformers if they belong to the same molecule, consider them as one query with different conformers
+                for gr in gr_confs:
+                    if len(gr) > 1:
+                        for i in range(1, len(gr)):
+                            query[gr[0][1]]["mol"].AddConformer(query[gr[i][1]]["mol"].GetConformer(), assignId=True)
+                            query.pop(i)
     # perform shape screening with specified parameters
     search_start = time.time()
     if args.nproc:
         pool_shape = mp.Pool(processes=args.nproc)
         if args.smiles:
-            mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads, args.pharm_feats) for i in query]
+            mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads) for i in query]
             mol3d_list = []
         else:
             if args.input.endswith(".csv") or args.input.endswith(".xlsx") or args.input.endswith(".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv"):
@@ -991,8 +985,10 @@ def shape(args):
     if args.pymol:
         for j in query:
             try:
-                visualize.export_pymol(f"{out_file}_{j + 1}_query.sdf", f"{out_file}_{j + 1}.sdf")
+                with open(f"{out_file}_{j + 1}.sdf", "r") as o_file:
+                    visualize.export_pymol(f"{out_file}_{j + 1}_query.sdf", f"{out_file}_{j + 1}.sdf")
             except FileNotFoundError:
+                print(f"No results found for query molecule {j}")
                 continue
     if args.pdf:
         visualize.gen_pdf_shape(query, results, out_file)
