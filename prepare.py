@@ -1,11 +1,11 @@
-from rdkit.Chem import AllChem as Chem
-from molvs.tautomer import TautomerCanonicalizer
 from molvs.standardize import Standardizer
+from molvs.tautomer import TautomerCanonicalizer
+from rdkit.Chem import AllChem as Chem
 from rdkit.Chem import MACCSkeys
 from rdkit.Chem.AtomPairs import Pairs, Torsions
 
 
-def do_standard_mp(mol:Chem.rdchem.Mol, n:int=0, ntauts:int=100) -> tuple:
+def do_standard_mp(mol: Chem.rdchem.Mol, n: int = 0, ntauts: int = 100) -> tuple:
     """
     Function to standardize and canonicalize and RDKit Mol.
     :param mol: molecule to be standardized
@@ -37,7 +37,8 @@ def do_standard(mols, ntauts):
     """
     for n in mols:
         try:
-            mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mols[n]["mol"]), skip_standardize=True)
+            mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mols[n]["mol"]),
+                                                   skip_standardize=True)
             mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol_sta)
             mols[n]["mol"] = mol_sta
             if Chem.MolToSmiles(mol_sta) == Chem.MolToSmiles(mol_can):
@@ -55,20 +56,21 @@ def fp_morgan_std_mp(mol, mol_can, i, radius, features, chiral, nBits):
         fp_can = fp_mol
     else:
         fp_can = Chem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nBits, useFeatures=features,
-                                            useChirality=chiral)
+                                                    useChirality=chiral)
     return (i, fp_mol, fp_can)
 
 
 def fp_morgan_std(mols, radius, features, chiral, nBits):
     for i in mols:
         fp_mol = Chem.GetMorganFingerprintAsBitVect(mols[i]["mol"], radius, nBits=nBits, useFeatures=features,
-                                                useChirality=chiral)
+                                                    useChirality=chiral)
         mols[i]["fp"] = fp_mol
         if id(mols[i]["mol"]) == id(mols[i]["mol_can"]):
             mols[i]["fp_can"] = fp_mol
         else:
-            mols[i]["fp_can"] = Chem.GetMorganFingerprintAsBitVect(mols[i]["mol_can"], radius, nBits=nBits, useFeatures=features,
-                                                useChirality=chiral)
+            mols[i]["fp_can"] = Chem.GetMorganFingerprintAsBitVect(mols[i]["mol_can"], radius, nBits=nBits,
+                                                                   useFeatures=features,
+                                                                   useChirality=chiral)
 
 
 def fp_rdkit_std_mp(mol, mol_can, i, nBits):
@@ -106,7 +108,8 @@ def fp_tt_std(mols, nBits, chiral):
         if id(mols[i]["mol"]) == id(mols[i]["mol_can"]):
             mols[i]["fp_can"] = fp_mol
         else:
-            mols[i]["fp_can"] = Torsions.GetHashedTopologicalTorsionFingerprint(mols[i]["mol_can"], nBits=nBits, includeChirality=chiral)
+            mols[i]["fp_can"] = Torsions.GetHashedTopologicalTorsionFingerprint(mols[i]["mol_can"], nBits=nBits,
+                                                                                includeChirality=chiral)
 
 
 def fp_ap_std_mp(mol, mol_can, i, nBits, chiral):
@@ -125,7 +128,8 @@ def fp_ap_std(mols, nBits, chiral):
         if id(mols[i]["mol"]) == id(mols[i]["mol_can"]):
             mols[i]["fp_can"] = fp_mol
         else:
-            mols[i]["fp_can"] = Pairs.GetHashedAtomPairFingerprint(mols[i]["mol_can"], nBits=nBits, includeChirality=chiral)
+            mols[i]["fp_can"] = Pairs.GetHashedAtomPairFingerprint(mols[i]["mol_can"], nBits=nBits,
+                                                                   includeChirality=chiral)
 
 
 def fp_maccs_std_mp(mol, mol_can, i):
@@ -160,7 +164,6 @@ def gen_confs_mp(mol, num, nconfs, seed, threshold, nthreads):
         Chem.MMFFOptimizeMoleculeConfs(mol_H, numThreads=nthreads, maxIters=2000)
     except:
         pass
-    print(num)
     return (mol_H, num, Chem.MolToSmiles(mol))
 
 
@@ -182,11 +185,10 @@ def gen_confs(mols, nconfs, seed, threshold, key, nthreads):
         mols[i]["confs"] = mol_H
         mols[i]["pattern"] = Chem.MolToSmiles(mols[i][key])
         counter += 1
-        print(counter)
 
 
 def fp_morgan(mols, radius, features, chiral, nBits):
     for i in mols:
         fp_mol = Chem.GetMorganFingerprintAsBitVect(mols[i]["mol"], radius, nBits=nBits, useFeatures=features,
-                                                useChirality=chiral)
+                                                    useChirality=chiral)
         mols[i]["fp"] = fp_mol
