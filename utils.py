@@ -16,9 +16,11 @@ def check_filter(filter_list, parser):
                         x = float(entry.split("_")[1])
                         filter_dict[prop] = x
                     except ValueError:
-                        parser.exit(status=1, message=f"Filter {entry} not supported. Please check the documentation which filters are supported!")
+                        parser.exit(status=1, message=f"Filter {entry} not supported. Please check the documentation "
+                                                      f"which property filters are supported!")
                 else:
-                    parser.exit(status=1, message=f"Filter {entry} not supported. Please check the documentation which filters are supported!")
+                    parser.exit(status=1, message=f"Filter {entry} not supported. Please check the documentation which "
+                                                  f"property filters are supported!")
     return filter_dict
 
 
