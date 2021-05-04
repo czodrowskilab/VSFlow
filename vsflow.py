@@ -18,6 +18,7 @@ import prepare
 import read
 import shapesearch
 import sss
+import utils
 import visualize
 import write_output
 
@@ -137,36 +138,6 @@ substructure.add_argument("--combine", help="if specified, multiple arguments pr
                           action="store_true")
 
 
-def check_filter(filter_list):
-    choices = ["mw", "logp",
-               "nhdo",
-               "nhac", "nrob",
-               "naro", "nhet",
-               "tpsa"]
-    filter_dict = {}
-    for prop in choices:
-        for entry in filter_list:
-            if prop in entry:
-                if entry.startswith(prop):
-                    try:
-                        x = float(entry.split("_")[1])
-                        filter_dict[prop] = x
-                    except ValueError:
-                        parser.error(message=f"Filter {entry} not supported")
-    return filter_dict
-
-
-def calc_props(mol, props):
-    props["MW (g/mol)"] = str(round(Descriptors.MolWt(mol), 2))
-    props["cLogP"] = str(round(Descriptors.MolLogP(mol), 2))
-    props["TPSA (A\u00b2)"] = str(round(Descriptors.TPSA(mol), 2))
-    props["HDon"] = str(Descriptors.NumHDonors(mol))
-    props["HAcc"] = str(Descriptors.NumHAcceptors(mol))
-    props["RotBonds"] = str(Descriptors.NumRotatableBonds(mol))
-    props["AromRings"] = str(Descriptors.NumAromaticRings(mol))
-    props["HetAromRings"] = str(Descriptors.NumAromaticHeterocycles(mol))
-
-
 def read_database(args):
     mols = {}
     if args.database in db_config:
@@ -260,7 +231,7 @@ def substruct(args):
         print("Running in single core mode")
     # check if filter is set correct
     if args.filter:
-        filter_dict = check_filter(args.filter)
+        filter_dict = utils.check_filter(args.filter, substructure)
     else:
         filter_dict = {}
     # check if output path is valid
@@ -332,7 +303,7 @@ def substruct(args):
     # calculate properties if desired
     if args.properties:
         for i in results:
-            calc_props(results[i]["mol"], results[i]["props"])
+            utils.calc_props(results[i]["mol"], results[i]["props"])
     # write results to output file(s)
     print(f"{len(results)} matches found")
     print("Generating output file(s) ...")
@@ -460,7 +431,7 @@ def fingerprint(args):
         print("Running in single core mode")
     # check if filter is set correct
     if args.filter:
-        filter_dict = check_filter(args.filter)
+        filter_dict = utils.check_filter(args.filter, fp_sim)
     else:
         filter_dict = {}
     if "/" in args.output:
@@ -677,7 +648,7 @@ def fingerprint(args):
     # calculate molecular properties
     if args.properties:
         for i in results:
-            calc_props(results[i]["mol"], results[i]["props"])
+            utils.calc_props(results[i]["mol"], results[i]["props"])
     # write output files
     print("Generating output file(s) ...")
     if args.multfile:
