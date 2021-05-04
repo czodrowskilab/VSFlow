@@ -1,15 +1,18 @@
 import os
+
 from fpdf import FPDF
 from pdfrw import PdfReader
 from pdfrw import PdfWriter
-from rdkit.Chem import AllChem as Chem
-from rdkit.Chem.Draw import rdMolDraw2D
-from rdkit.Chem.Draw import SimilarityMaps
 from pymol import cmd
+from rdkit.Chem import AllChem as Chem
+from rdkit.Chem.Draw import SimilarityMaps
+from rdkit.Chem.Draw import rdMolDraw2D
+
 import fpsearch
 
 script_path = os.path.dirname(os.path.abspath(__file__))
 ttf_path = f"{script_path}/resources/DejaVuSansMono.ttf"
+
 
 def add_colours_to_map(els, cols, col_num, COLS):
     for el in els:
@@ -150,7 +153,6 @@ def gen_pdf_mf(query, results, out_file):
                                 b = results[n]["mol"].GetBondBetweenAtoms(ha1, ha2)
                                 if b:
                                     add_bonds.append(b.GetIdx())
-                    #if len(add_bonds) % len(blist) == 0:
                     for bo2 in add_bonds:
                         if bo2 not in blist:
                             blist.append(bo2)
@@ -193,7 +195,6 @@ def gen_pdf(query, results, out_file):
                         b = results[i]["mol"].GetBondBetweenAtoms(ha1, ha2)
                         if b:
                             add_bonds.append(b.GetIdx())
-            #if len(add_bonds) % len(blist) == 0:
             for bo2 in add_bonds:
                 if bo2 not in blist:
                     blist.append(bo2)
@@ -232,7 +233,8 @@ def gen_pdf_shape(query, results, out_file):
 
 def sim_map(results, query, fp_func, metric, out_file):
     for i in results:
-        fig, maxweight = SimilarityMaps.GetSimilarityMapForFingerprint(query[results[i]["q_num"]]["mol"], results[i]["mol"],
+        fig, maxweight = SimilarityMaps.GetSimilarityMapForFingerprint(query[results[i]["q_num"]]["mol"],
+                                                                       results[i]["mol"],
                                                                        fp_func, metric=fpsearch.sim_dict[metric])
         fig.set_figwidth(3.255)
         fig.set_figheight(3.255)
@@ -272,7 +274,6 @@ def fp_maps(results, query, fingerprint, fpradius, nbits, features, metric, out_
     elif fingerprint == "ap":
         fp_func = lambda m, idx: SimilarityMaps.GetAPFingerprint(m, atomId=idx, fpType="bv", nBits=nbits)
     else:
-        #fingerprint == "tt":
         fp_func = lambda m, idx: SimilarityMaps.GetTTFingerprint(m, atomId=idx, fpType="bv", nBits=nbits)
     if multfile:
         sim_map_mf(results, query, fp_func, metric, out_file)
@@ -294,5 +295,3 @@ def export_pymol(file1, file2):
     cmd.delete(pref2)
     cmd.save(f"{py_object2}.pse")
     cmd.delete("all")
-
-
