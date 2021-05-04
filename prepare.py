@@ -183,3 +183,10 @@ def gen_confs(mols, nconfs, seed, threshold, key, nthreads):
         mols[i]["pattern"] = Chem.MolToSmiles(mols[i][key])
         counter += 1
         print(counter)
+
+
+def fp_morgan(mols, radius, features, chiral, nBits):
+    for i in mols:
+        fp_mol = Chem.GetMorganFingerprintAsBitVect(mols[i]["mol"], radius, nBits=nBits, useFeatures=features,
+                                                useChirality=chiral)
+        mols[i]["fp"] = fp_mol
