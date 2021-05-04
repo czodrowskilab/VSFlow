@@ -225,8 +225,9 @@ def gen_pdf_shape(query, results, out_file):
                 d.FinishDrawing()
                 d.WriteDrawingText(f"{n}.png")
                 mol_keys.append(n)
-        pages = gen_pdf_pages(mol_keys, results)
-        export_pdf(pages, f"{out_file}_{m + 1}.pdf")
+        if mol_keys:
+            pages = gen_pdf_pages(mol_keys, results)
+            export_pdf(pages, f"{out_file}_{m + 1}.pdf")
 
 
 def sim_map(results, query, fp_func, metric, out_file):
