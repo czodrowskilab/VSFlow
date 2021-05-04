@@ -1,7 +1,8 @@
-from rdkit.Chem import AllChem as Chem
-import xlsxwriter
-import os
 import csv
+import os
+
+import xlsxwriter
+from rdkit.Chem import AllChem as Chem
 
 
 def write_sdf(mol, props, output):
@@ -75,7 +76,6 @@ def prepare_lines(mol, props, sorteddict, lines):
     lines.append(line)
 
 
-
 def gen_csv_xls_mult(query, results, output):
     out_prefix = output.rsplit(".", maxsplit=1)[0]
     out_ext = output.rsplit(".", maxsplit=1)[1]
@@ -133,4 +133,3 @@ def gen_sdf(results, output):
     with open(f"{out_file}.sdf", "w") as out:
         for n in results:
             write_sdf(results[n]["mol"], results[n]["props"], out)
-
