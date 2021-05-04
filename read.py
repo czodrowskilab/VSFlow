@@ -44,27 +44,24 @@ def req_chembl(nproc, pool):
         print(sub[1])
     del content
     return sub
-    # sub = {}
-    # for i in range(1, len(byte_cont)):
-    #     print(i)
-    #     mol = Chem.MolFromSmiles(byte_cont[i][1])
-    #     if mol:
-    #         sub[i] = {"mol": mol, "pattern": byte_cont[i][1].decode(), "props": {"chembl_id": byte_cont[i][0].decode()}}
-    # content = byte_cont.decode()
-    # print("decoded")
-    # fd.close()
-    # print(content[:100])
-    # lines = content.split("\n")
-    # print(lines[0])
-    # sub = {}
-    # for i in range(1, len(lines)):
-    #     print(i)
-    #     line_split = lines[i].split("\t")
-    #     mol = Chem.MolFromSmiles(lines[i][1])
-    #     if mol:
-    #         sub[i] = {"mol": mol, "pattern": lines[i][1], "props": {"chembl_id": lines[i][0]}}
-    # print(sub[1])
-    # return sub
+
+
+def req_pdb():
+    r = urlopen("http://ligand-expo.rcsb.org/dictionaries/Components-smiles-stereo-oe.smi")
+    c = r.readlines()
+    cont = {}
+    for i in range(len(c)):
+        cont[i] = c[i].strip(b"\n").split(b"\t")
+    sub = {}
+    for n in cont:
+        try:
+            mol = Chem.MolFromSmiles(cont[n][0])
+            if mol:
+                sub[n] = {"mol": mol,
+                          "props": {"ligand_id": cont[n][1].decode(), "name": cont[n][2].decode()}}
+        except:
+            continue
+    return sub
 
 
 def query_standardize(mol):
