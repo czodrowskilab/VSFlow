@@ -11,7 +11,6 @@ from itertools import groupby
 import matplotlib as mpl
 from fpdf import set_global
 from rdkit import RDLogger
-from rdkit.Chem import Descriptors
 
 import fpsearch
 import prepare
@@ -41,13 +40,13 @@ else:
     config = {"global_db": f"{script_path}/Databases", "local_db": f"{home}/VSFlow_Databases"}
     db_config = {}
     db_default = ""
-print(db_config)
 for key in config:
     try:
         for file in os.listdir(config[key]):
             if file.endswith(".vsdb"):
                 if file.rsplit(".vsdb", maxsplit=1)[0] in db_config:
-                    if db_config[file.rsplit(".vsdb", maxsplit=1)[0]][0] == time.ctime(os.path.getmtime(f"{config[key]}/{file}")):
+                    if db_config[file.rsplit(".vsdb", maxsplit=1)[0]][0] == time.ctime(
+                            os.path.getmtime(f"{config[key]}/{file}")):
                         continue
                 print("Updating databases")
                 db = pickle.load(open(f"{config[key]}/{file}", "rb"))
@@ -96,7 +95,9 @@ print('''\
 
 **************************
 ''')
-subparsers = parser.add_subparsers(title="mode", help="specify mode of VSFlow {substructure, fpsim, shape, preparedb, managedb}", metavar="MODE")
+subparsers = parser.add_subparsers(title="mode",
+                                   help="specify mode of VSFlow {substructure, fpsim, shape, preparedb, managedb}",
+                                   metavar="MODE")
 
 # substructure search
 
@@ -134,7 +135,8 @@ substructure.add_argument("--mol_column",
 substructure.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized",
                           metavar="")
 substructure.add_argument("--pdf", help="generate a pdf file for all results", action="store_true")
-substructure.add_argument("--combine", help="if specified, multiple arguments provided via -smi or -sma are combined to one query",
+substructure.add_argument("--combine",
+                          help="if specified, multiple arguments provided via -smi or -sma are combined to one query",
                           action="store_true")
 
 
@@ -148,19 +150,22 @@ def read_database(args):
                 mols = pickle.load(open(f"{config['global_db']}/{args.database}.vsdb", "rb"))
             except FileNotFoundError:
                 parser.exit(status=1,
-                    message=f"{args.database} not found. Please make sure you specified the correct shortcut")
+                            message=f"{args.database} not found. Please make sure you specified the correct shortcut")
+    elif args.database == "":
+        parser.exit(status=1, message="No default database set! Please use mode managedb to set a default database or "
+                                      "specify a path/shortcut using the -d/--database argument!")
     else:
         if os.path.exists(args.database):
             if args.database.endswith(".vsdb"):
                 try:
                     mols = pickle.load(open(args.database, "rb"))
                 except:
-                    parser.exit(status=1, message=f"{args.database} could not be opened. Please make sure the file has the correct "
-                                               f"format")
+                    parser.exit(status=1,
+                                message=f"{args.database} could not be opened. Please make sure the file has the "
+                                        f"correct format")
 
             else:
                 if args.nproc:
-                    print("here")
                     pool = mp.Pool(processes=args.nproc)
                     if args.database.endswith(".sdf"):
                         mols, failed = read.read_sd_mp(args.database, pool)
@@ -174,12 +179,16 @@ def read_database(args):
                     else:
                         mols, failed = read.read_db_from_sd(args.database, gz=True)
                 if failed:
-                    print(f"{len(failed)} of {len(mols) + len(failed)} molecules in {args.database} could not be processed")
+                    print(
+                        f"{len(failed)} of {len(mols) + len(failed)} molecules in {args.database} could not be "
+                        f"processed")
                 if not mols:
-                    parser.exit(status=1, message="No molecules could be read from SD file. Please make sure it has the right "
-                                               "format")
+                    parser.exit(status=1,
+                                message="No molecules could be read from SD file. Please make sure it has the right "
+                                        "format")
         else:
-            parser.exit(status=1, message=f"File {args.database} not found. Please make sure you specified the correct path")
+            parser.exit(status=1,
+                        message=f"File {args.database} not found. Please make sure you specified the correct path")
     return mols
 
 
@@ -198,15 +207,20 @@ def read_input(smarts, smiles, infile, mode, ntauts, mol_column, delimiter, read
             if not query:
                 if infile.endswith(".sdf"):
                     parser.exit(status=1, message="No valid molecules could be read from SD file.")
-                elif infile.endswith(".csv") or infile.endswith(".smi") or infile.endswith(".ich") or infile.endswith(".tsv"):# or args.input_format == "csv":
-                    parser.exit(status=1, message="No valid molecules could be read from input file. Please check/specify "
-                                               "name of SMILES/InChI containing column (--mol_column) or check/specify the"
-                                               "separator (--delimiter)")
+                elif infile.endswith(".csv") or infile.endswith(".smi") or infile.endswith(".ich") or infile.endswith(
+                        ".tsv"):  # or args.input_format == "csv":
+                    parser.exit(status=1,
+                                message="No valid molecules could be read from input file. Please check/specify "
+                                        "name of SMILES/InChI containing column (--mol_column) or check/specify the"
+                                        "separator (--delimiter)")
                 elif infile.endswith(".xlsx"):
-                    parser.exit(status=1, message="No valid molecules could be read from input file. Please check/specify "
-                                               "name of SMILES/InChI containing column (--mol_column))")
+                    parser.exit(status=1,
+                                message="No valid molecules could be read from input file. Please check/specify "
+                                        "name of SMILES/InChI containing column (--mol_column))")
                 else:
-                    parser.exit(status=1, message="File format not recognized. Supported formats are: .sdf, .sdf.gz, .csv, .smi, .ich, .tsv, .xlsx")
+                    parser.exit(status=1,
+                                message="File format not recognized. Supported formats are: .sdf, .sdf.gz, .csv, .smi, "
+                                        ".ich, .tsv, .xlsx")
         else:
             query = {}
             parser.exit(status=1, message=f"File {infile} not found. Please make sure you specified the correct path")
@@ -237,7 +251,8 @@ def substruct(args):
     # check if output path is valid
     if "/" in args.output:
         if not os.path.exists(os.path.dirname(args.output)):
-            parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
+            parser.exit(status=1,
+                        message=f"{args.output} is no valid path. Please check if you specified the correct path")
     print(f"Loading database {args.database} ...")
     sub_time = time.time()
     # load database if database path is valid
@@ -251,7 +266,8 @@ def substruct(args):
     print(sub_dur)
     print("Reading query input ...")
     # load input if paths are correct
-    query = read_input(args.smarts, args.smiles, args.input, args.mode, args.ntauts, args.mol_column, args.delimiter, read_smarts=True)
+    query = read_input(args.smarts, args.smiles, args.input, args.mode, args.ntauts, args.mol_column, args.delimiter,
+                       read_smarts=True)
     # set mol used based on selected mode and database
     if db_desc:
         if db_desc[0] == "yes":
@@ -286,7 +302,6 @@ def substruct(args):
         if args.nproc:
             pool = mp.Pool(processes=args.nproc)
             if args.mode == "std" or args.mode == "can_taut" or args.mode == "no_std":
-                print("here")
                 sss.sss_mp(query, mols, key, filter_dict, results, pool)
             else:
                 sss.sss_mp_taut(query, mols, key, filter_dict, results, pool)
@@ -324,7 +339,8 @@ def substruct(args):
                         for i in range(1, len(entry)):
                             for match in entry[i]["match"]:
                                 entry[0]["match"].append(match)
-                            entry[0]['props']['QuerySmiles'] = f"{entry[0]['props']['QuerySmiles']} and {entry[i]['props']['QuerySmiles']}"
+                            entry[0]['props']['QuerySmiles'] = f"{entry[0]['props']['QuerySmiles']} and " \
+                                                               f"{entry[i]['props']['QuerySmiles']}"
                         results[counter] = entry[0]
                         counter += 1
     if args.multfile:
@@ -337,7 +353,8 @@ def substruct(args):
                 write_output.gen_sdf_mult(query, results, args.output)
             if args.pdf:
                 print("Generating PDF file(s) ...")
-                if args.output.endswith(".sdf") or args.output.endswith(".csv") or args.output.endswith(".xlsx") or args.output.endswith(".xls"):
+                if args.output.endswith(".sdf") or args.output.endswith(".csv") or args.output.endswith(
+                        ".xlsx") or args.output.endswith(".xls"):
                     out_file = args.output.rsplit(".", maxsplit=1)[0]
                 else:
                     out_file = args.output
@@ -364,7 +381,6 @@ def substruct(args):
 
 substructure.set_defaults(func=substruct)
 
-
 ## Fingerprint similarity search
 
 fp_sim = subparsers.add_parser("fpsim", description="molecular similarity search using fingerprints")
@@ -379,8 +395,9 @@ fp_sim.add_argument("-o", "--output", help="specify name of output file [default
 fp_sim.add_argument("-m", "--mode", help="choose a mode for similarity search [std, all_tauts, can_taut, no_std]",
                     choices=["std", "all_tauts", "can_taut", "no_std"], default="std", metavar="")
 fp_sim.add_argument("-np", "--nproc", type=int, help="Specify the number of processors used when the application is "
-                                                      "run in multiprocessing mode.", metavar="")
-fp_sim.add_argument("-f", "--fingerprint", help="specify fingerprint to be used [rdkit, ecfp, fcfp, ap, tt, maccs], [default: fcfp]",
+                                                     "run in multiprocessing mode.", metavar="")
+fp_sim.add_argument("-f", "--fingerprint",
+                    help="specify fingerprint to be used [rdkit, ecfp, fcfp, ap, tt, maccs], [default: fcfp]",
                     choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs", "from_db"], default="fcfp", metavar="")
 fp_sim.add_argument("-r", "--radius", help="specify radius of circular fingerprints ecfp and fcfp [default: 3]",
                     type=int, default=3, metavar="")
@@ -393,7 +410,7 @@ fp_sim.add_argument("-t", "--top_hits", type=int, default=10,
                     help="Maximum number of molecules with highest similarity to keep [default: 10]", metavar="")
 fp_sim.add_argument("-c", "--cutoff", help="specify cutoff value for similarity coefficient", type=float, metavar="")
 fp_sim.add_argument("-nt", "--ntauts", help="maximum number of query tautomers to be enumerated in mode all_tauts "
-                                     "[default: 100]", type=int, default=100, metavar="")
+                                            "[default: 100]", type=int, default=100, metavar="")
 fp_sim.add_argument("-mf", "--multfile", help="generate separate output files for every query molecule",
                     action="store_true")
 fp_sim.add_argument("-p", "--properties",
@@ -436,14 +453,16 @@ def fingerprint(args):
         filter_dict = {}
     if "/" in args.output:
         if not os.path.exists(os.path.dirname(args.output)):
-            parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
+            parser.exit(status=1,
+                        message=f"{args.output} is no valid path. Please check if you specified the correct path")
     print(f"Loading database {args.database} ...")
     sub_time = time.time()
     # load database if database path is valid
     if args.fingerprint == "from_db":
         if args.database.endswith(".sdf") or args.database.endswith(".sdf.gz"):
-            parser.exit(status=1, message="Fingerprints can not be read from an SD file. Use preparedb -f/--fingerprint "
-                                          "to generate a database file containing fingerprints!")
+            parser.exit(status=1,
+                        message="Fingerprints can not be read from an SD file. Use preparedb -f/--fingerprint "
+                                "to generate a database file containing fingerprints!")
     mols = read_database(args)
     try:
         db_desc = mols.pop("config")
@@ -479,7 +498,9 @@ def fingerprint(args):
                 if args.mode == "can_taut":
                     fp_key = "fp_can"
             else:
-                parser.exit(status=1, message=f"No fingerprints included in {args.database}. Use preparedb -f/--fingerprint to generate fps!")
+                parser.exit(status=1,
+                            message=f"No fingerprints included in {args.database}. Use preparedb -f/--fingerprint to "
+                                    f"generate fps!")
     print(args.fingerprint)
     print(fp_key)
     if args.fingerprint == "fcfp" or args.fingerprint == "ecfp":
@@ -495,7 +516,8 @@ def fingerprint(args):
                 fps = pool.starmap(fpsearch.fp_morgan_mp, argslist)
                 fpsearch.set_fp_mp(fps, mols)
             if args.mode == "all_tauts":
-                argslist = [(query[j]["tauts"][k], j, k, args.radius, features, args.no_chiral, args.nbits) for j in query for k in range(len(query[j]["tauts"]))]
+                argslist = [(query[j]["tauts"][k], j, k, args.radius, features, args.no_chiral, args.nbits) for j in
+                            query for k in range(len(query[j]["tauts"]))]
                 fps = pool.starmap(fpsearch.fp_morgan_taut, argslist)
                 fpsearch.set_fp_mp(fps, mols)
             else:
@@ -521,7 +543,8 @@ def fingerprint(args):
                 fps = pool.starmap(fpsearch.fp_rdkit_mp, argslist)
                 fpsearch.set_fp_mp(fps, mols)
             if args.mode == "all_tauts":
-                argslist = [(query[j]["mol"][k], j, k, args.nbits) for j in query for k in range(len(query[j]["tauts"]))]
+                argslist = [(query[j]["mol"][k], j, k, args.nbits) for j in query for k in
+                            range(len(query[j]["tauts"]))]
                 fps = pool.starmap(fpsearch.fp_rdkit_taut_mp, argslist)
                 fpsearch.set_fp_taut_mp(fps, query)
             else:
@@ -547,7 +570,8 @@ def fingerprint(args):
                 fps = pool.starmap(fpsearch.fp_atompairs_mp, argslist)
                 fpsearch.set_fp_mp(fps, mols)
             if args.mode == "all_tauts":
-                argslist = [(query[j]["mol"][k], j, k, args.nbits, args.no_chiral) for j in query for k in range(len(query[j]["tauts"]))]
+                argslist = [(query[j]["mol"][k], j, k, args.nbits, args.no_chiral) for j in query for k in
+                            range(len(query[j]["tauts"]))]
                 fps = pool.starmap(fpsearch.fp_atompairs_taut_mp, argslist)
                 fpsearch.set_fp_taut_mp(fps, mols)
             else:
@@ -573,7 +597,8 @@ def fingerprint(args):
                 fps = pool.starmap(fpsearch.fp_torsion_mp, argslist)
                 fpsearch.set_fp_mp(fps, mols)
             if args.mode == "all_tauts":
-                argslist = [(query[j]["mol"][k], j, k, args.nbits, args.no_chiral) for j in query for k in range(len(query[j]["tauts"]))]
+                argslist = [(query[j]["mol"][k], j, k, args.nbits, args.no_chiral) for j in query for k in
+                            range(len(query[j]["tauts"]))]
                 fps = pool.starmap(fpsearch.fp_torsion_taut_mp, argslist)
                 fpsearch.set_fp_taut_mp(fps, mols)
             else:
@@ -633,11 +658,6 @@ def fingerprint(args):
             results = fpsearch.sim_top_tver(mols, query, key, fp_key, args.top_hits, args.similarity, filter_dict, name,
                                             args.tver_alpha, args.tver_beta, args.mode)
         else:
-            # if args.nproc:
-            #     pool = mp.Pool(processes=args.nproc)
-            # else:
-            #     pool = None
-            # results = fpsearch.sim_top(mols, query, key, fp_key, args.top_hits, args.similarity, filter_dict, name, args.mode, args.nproc, pool)
             results = fpsearch.sim_top(mols, query, key, fp_key, args.top_hits, args.similarity, filter_dict, name,
                                        args.mode)
     sub_time_4 = time.time()
@@ -706,7 +726,6 @@ def fingerprint(args):
 
 fp_sim.set_defaults(func=fingerprint)
 
-
 ## shape similarity search
 
 shape_sim = subparsers.add_parser("shape")
@@ -753,8 +772,9 @@ shape_sim.add_argument("--tver_beta", help="specify beta parameter (weighs query
                                            "[default: 0.5]", default=0.5, type=float, metavar="")
 shape_sim.add_argument("--pdf", action="store_true", help="generate a pdf file for all results")
 shape_sim.add_argument("--pymol", action="store_true", help="generate PyMOL file with 3D conformations for results")
-shape_sim.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
-                                            "not automatically recognized", metavar="")
+shape_sim.add_argument("--mol_column",
+                       help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
+                            "not automatically recognized", metavar="")
 shape_sim.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
 
 
@@ -782,7 +802,8 @@ def shape(args):
     # check if output path is valid
     if "/" in args.output:
         if not os.path.exists(os.path.dirname(args.output)):
-            parser.exit(status=1, message=f"{args.output} is no valid path. Please check if you specified the correct path")
+            parser.exit(status=1,
+                        message=f"{args.output} is no valid path. Please check if you specified the correct path")
     mols = {}
     # load database
     if args.database in db_config:
@@ -793,7 +814,7 @@ def shape(args):
                 mols = pickle.load(open(f"{config['global_db']}/{args.database}.vsdb", "rb"))
             except FileNotFoundError:
                 parser.exit(status=1,
-                    message=f"{args.database} not found. Please make sure you specified the correct shortcut")
+                            message=f"{args.database} not found. Please make sure you specified the correct shortcut")
     else:
         if os.path.exists(args.database):
             if args.database.endswith(".vsdb"):
@@ -817,8 +838,8 @@ def shape(args):
                 if not mols:
                     parser.exit(status=1, message="No molecules with 3D coordinates could be read from SD file !")
             else:
-                parser.exit(status=1, message="Database file must have format .vsdb or .sdf/.sdf.gz. "
-                                              "Use mode preparedb to prepare a database for shape similarity screening.")
+                parser.exit(status=1, message="Database file must have format .vsdb or .sdf/.sdf.gz. Use mode preparedb"
+                                              " to prepare a database for shape similarity screening.")
         else:
             parser.exit(status=1, message=f"{args.database} could not be opened. "
                                           f"Please make sure you specified the correct path")
@@ -844,7 +865,8 @@ def shape(args):
             query = read.read_sd(args.input, mode="std", ntauts=None)
         elif args.input.endswith(".sdf.gz"):
             query = read.read_sd(args.input, mode="std", ntauts=None, gz=True)
-        elif args.input.endswith(".csv") or args.input.endswith(".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv"):
+        elif args.input.endswith(".csv") or args.input.endswith(".smi") or args.input.endswith(
+                ".ich") or args.input.endswith(".tsv"):
             query = read.read_csv(args.input, args.mol_column, args.delimiter, mode="std", ntauts=None)
         else:
             query = read.read_excel(args.input, args.mol_column, mode="std", ntauts=None)
@@ -856,7 +878,8 @@ def shape(args):
             confs = [(query[i]["mol"], i, query[i]["pattern"]) for i in query if query[i]["mol"].GetConformer().Is3D()]
             if confs:
                 gr_confs = [list(group) for k, group in groupby(confs, lambda x: x[2])]
-                # combine conformers if they belong to the same molecule, consider them as one query with different conformers
+                # combine conformers if they belong to the same molecule, consider them as one query with different
+                # conformers
                 for gr in gr_confs:
                     if len(gr) > 1:
                         for i in range(1, len(gr)):
@@ -870,7 +893,8 @@ def shape(args):
             mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads) for i in query]
             mol3d_list = []
         else:
-            if args.input.endswith(".csv") or args.input.endswith(".xlsx") or args.input.endswith(".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv"):
+            if args.input.endswith(".csv") or args.input.endswith(".xlsx") or args.input.endswith(
+                    ".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv"):
                 mol3d_list = []
                 mol2d_list = [(query[i]["mol"], i, args.nconfs, seed, args.keep_confs, nthreads) for i in query]
             else:
@@ -893,20 +917,22 @@ def shape(args):
                                                           query[j]["pattern"], k, nthreads, args.shape_simi,
                                                           args.fp_simi, args.tver_alpha, args.tver_beta,
                                                           args.align_method, args.pharm_feats) for i in mols for j in
-                                                          query for k in range(query[j]["confs"].GetNumConformers())
-                                                          if "confs" in mols[i]])
+                                                         query for k in range(query[j]["confs"].GetNumConformers())
+                                                         if "confs" in mols[i]])
         algs = [entry for entry in algs if entry]
         pool_shape.close()
     else:
-        shapesearch.gen_query_conf_pfp(query, args.nconfs, seed, args.keep_confs, nthreads, args.align_method, args.pharm_feats)
-        algs = shapesearch.shape_search(mols, query, nthreads, args.align_method, args.shape_simi, args.fp_simi, args.pharm_feats, args.tver_alpha, args.tver_beta)
+        shapesearch.gen_query_conf_pfp(query, args.nconfs, seed, args.keep_confs, nthreads, args.align_method,
+                                       args.pharm_feats)
+        algs = shapesearch.shape_search(mols, query, nthreads, args.align_method, args.shape_simi, args.fp_simi,
+                                        args.pharm_feats, args.tver_alpha, args.tver_beta)
     search_end = time.time()
     search_time = search_end - search_start
     print(search_time)
     # sort results
     print("Filtering and sorting results...")
-    grouped_algs = [res for res in (list(group) for k, group in groupby(sorted(algs, key=lambda entry: entry[9]), lambda x: x[9]))]
-    print(len(grouped_algs))
+    grouped_algs = [res for res in
+                    (list(group) for k, group in groupby(sorted(algs, key=lambda entry: entry[9]), lambda x: x[9]))]
     grouped = []
     if args.score == "combo":
         sort_score = 0
@@ -916,14 +942,16 @@ def shape(args):
         sort_score = 2
     if args.cutoff:
         for res in grouped_algs:
-            gr = sorted([max(conf, key=lambda entry: entry[sort_score]) for conf in (list(group) for k, group in groupby(res, lambda x: x[8]))], reverse=True)
+            gr = sorted([max(conf, key=lambda entry: entry[sort_score]) for conf in
+                         (list(group) for k, group in groupby(res, lambda x: x[8]))], reverse=True)
             gr_res = [entry for entry in gr if entry[sort_score] >= args.cutoff]
             del gr
             grouped.append(gr_res)
     else:
         for res in grouped_algs:
-            gr_res = sorted([max(conf, key=lambda entry: entry[sort_score]) for conf in (list(group) for k, group in groupby(res, lambda x: x[8]))],
-                        reverse=True)[:args.top_hits]
+            gr_res = sorted([max(conf, key=lambda entry: entry[sort_score]) for conf in
+                             (list(group) for k, group in groupby(res, lambda x: x[8]))],
+                            reverse=True)[:args.top_hits]
             grouped.append(gr_res)
     results = {}
     counter = 0
@@ -945,7 +973,8 @@ def shape(args):
         with open(f"{out_file}_{j + 1}.sdf", "w") as out:
             for i in results:
                 if results[i]["q_num"] == j:
-                    write_output.write_sdf_conformer(results[i]["mol"], results[i]["props"], results[i]["top_conf"], out)
+                    write_output.write_sdf_conformer(results[i]["mol"], results[i]["props"], results[i]["top_conf"],
+                                                     out)
                     counter += 1
         if counter:
             with open(f"{out_file}_{j + 1}_query.sdf", "w") as out_q:
@@ -967,44 +996,51 @@ def shape(args):
 
 shape_sim.set_defaults(func=shape)
 
-
 ## prepare databases for screening
 
 prepare_db = subparsers.add_parser("preparedb", description="prepare databases for virtual screening")
 prep_group = prepare_db.add_mutually_exclusive_group()
 prep_in_group = prepare_db.add_mutually_exclusive_group(required=True)
 prep_in_group.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="infile")
-prep_in_group.add_argument("-d", "--download", help="specify shortcut for database that will be downloaded", choices=["chembl", "pdb"], metavar="")
-prepare_db.add_argument("-o", "--output", default="prep_database.vsdb", help="specify name of output file [default: prep_database.vsdb]",
-                   metavar="")
-prep_group.add_argument("-int", "--integrate", help="specify shortcut for database; saves database to $HOME/VSFlow_Databases", metavar="")
-prep_group.add_argument("-intg", "--int_global", help="specify shortcut for database, stores database within the repository folder",
-                   metavar="")
+prep_in_group.add_argument("-d", "--download", help="specify shortcut for database that will be downloaded",
+                           choices=["chembl", "pdb"], metavar="")
+prepare_db.add_argument("-o", "--output", default="prep_database.vsdb",
+                        help="specify name of output file [default: prep_database.vsdb]",
+                        metavar="")
+prep_group.add_argument("-int", "--integrate",
+                        help="specify shortcut for database; saves database to $HOME/VSFlow_Databases", metavar="")
+prep_group.add_argument("-intg", "--int_global",
+                        help="specify shortcut for database, stores database within the repository folder",
+                        metavar="")
 prepare_db.add_argument("-s", "--standardize", help="standardizes molecules, removes salts and associated charges",
-                   action="store_true")
+                        action="store_true")
 prepare_db.add_argument("-c", "--conformers", help="generates multiple 3D conformers, required for mode shape",
-                   action="store_true")
-prepare_db.add_argument("-np", "--nproc", type=int, help="specify number of processors to run application in multiprocessing mode", metavar="")
-prepare_db.add_argument("--max_tauts", help="maximum number of tautomers to be enumerated during standardization process",
-                   type=int, default=100, metavar="")
+                        action="store_true")
+prepare_db.add_argument("-np", "--nproc", type=int,
+                        help="specify number of processors to run application in multiprocessing mode", metavar="")
+prepare_db.add_argument("--max_tauts",
+                        help="maximum number of tautomers to be enumerated during standardization process",
+                        type=int, default=100, metavar="")
 prepare_db.add_argument("--nconfs", help="maximal number of conformers generated", type=int, default=20, metavar="")
 prepare_db.add_argument("--rms_thresh", help="if specified, only those conformations out of nconfs that are at least "
-                                        "this different are retained (RMSD calculated on heavy atoms)", type=float,
-                   metavar="")
-prepare_db.add_argument("--seed", type=int, help="specify seed for random number generator, for reproducibility", metavar="")
+                                             "this different are retained (RMSD calculated on heavy atoms)", type=float,
+                        metavar="")
+prepare_db.add_argument("--seed", type=int, help="specify seed for random number generator, for reproducibility",
+                        metavar="")
 prepare_db.add_argument("--boost", help="distributes conformer generation on all available threads of your cpu",
-                   action="store_true")
+                        action="store_true")
 prepare_db.add_argument("--header", help="Specify number of row in csv/xlsx containing the column names "
-                                     "[default: 1, e.g. first row]", type=int, metavar="")
-prepare_db.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
-                                         "not automatically recognized", metavar="")
+                                         "[default: 1, e.g. first row]", type=int, metavar="")
+prepare_db.add_argument("--mol_column",
+                        help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
+                             "not automatically recognized", metavar="")
 prepare_db.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
 prepare_db.add_argument("-f", "--fingerprint", help="specify fingerprint to be used [rdkit, ecfp, fcfp, ap, tt, maccs]",
-                    choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs"], metavar="")
+                        choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs"], metavar="")
 prepare_db.add_argument("-r", "--radius", help="specify radius of circular fingerprints ecfp and fcfp [default: 2]",
-                    type=int, default=2, metavar="")
+                        type=int, default=2, metavar="")
 prepare_db.add_argument("-nb", "--nbits", help="specify bit size of fingerprints [default: 2048]", type=int,
-                    default=2048, metavar="")
+                        default=2048, metavar="")
 prepare_db.add_argument("--no_chiral", help="specify if chirality should not be considered", action="store_false")
 
 
@@ -1074,28 +1110,9 @@ def prep_db(args):
                 f"press 'n' to choose a new name for the database or press 'c' to cancel and exit.")
             while choice != "o" and choice != "n" and choice != "c":
                 choice = input("Press 'o' to override the database, press 'n' to choose a new name for the "
-                                "database or press 'c' to cancel and exit.")
+                               "database or press 'c' to cancel and exit.")
             if choice == "o":
                 pass
-                # try:
-                #     test_load = pickle.load(open(f"{config['global_db']}/{db_name}", "rb"))
-                #     del test_load
-                #     with open(f"{config['global_db']}/.test", "w") as test_file:
-                #         test_file.write("")
-                # except FileNotFoundError:
-                #     pass
-                # except PermissionError:
-                #     sec_choice = input(f"You do not have the permission to change the database {db_name}. Please contact "
-                #           f"your system administrator or run again with sudo. Press 'c' to cancel or press 'n' to "
-                #           f"enter a different name")
-                #     while sec_choice != "n" and sec_choice != "c":
-                #         sec_choice = input(f"Press 'c' to cancel or press 'n' to enter a different name")
-                #     if sec_choice == "n":
-                #         db_name_new = input("Please enter different name:")
-                #         while db_name == args.integrate:
-                #             db_name = input("Please enter different name:")
-                #     else:
-                #         exit()
             elif choice == "n":
                 db_name_new = input("Please enter different name:")
                 while db_name == db_name_new:
@@ -1145,7 +1162,8 @@ def prep_db(args):
                 mols, failed = read.read_prepare_db_from_sd(args.input, gz=False)
         elif args.input.endswith(".xlsx"):
             mols = read.read_excel(args.input, args.mol_column, header=args.header, db=True)
-        elif args.input.endswith(".csv") or args.input.endswith(".smi") or args.input.endswith(".ich") or args.input.endswith(".tsv") or args.input.endswith(".txt"):
+        elif args.input.endswith(".csv") or args.input.endswith(".smi") or args.input.endswith(
+                ".ich") or args.input.endswith(".tsv") or args.input.endswith(".txt"):
             mols = read.read_csv(args.input, args.mol_column, args.delimiter, header=args.header, db=True)
         elif args.input.endswith(".csv.gz") or args.input.endswith(".tsv.gz") or args.input.endswith(".txt.gz"):
             mols = read.read_csv(args.input, args.mol_column, args.delimiter, header=args.header, db=True, gz=True)
@@ -1154,8 +1172,7 @@ def prep_db(args):
             db_desc = mols.pop("config")
         else:
             mols, failed = {}, []
-            parser.exit(status=2, message="File format not supported")
-        #print(f"{len(failed)} molecules out of {len(mols)} could not be processed")
+            parser.exit(status=1, message="File format not supported!")
         print(f"Finished reading input file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # standardize molecules
     if args.standardize:
@@ -1182,7 +1199,6 @@ def prep_db(args):
                     if not args.fingerprint:
                         args.fingerprint = db_desc[5]
                         print("Re-calculating fingerprints ...")
-    print(args.standardize)
     if args.fingerprint:
         print("Generating fingerprints ...")
         if args.fingerprint == "fcfp" or args.fingerprint == "ecfp":
@@ -1194,12 +1210,16 @@ def prep_db(args):
                 features = False
             if args.nproc:
                 if args.standardize:
-                    fps = can_pool.starmap(prepare.fp_morgan_std_mp, [(mols[n]["mol"], mols[n]["mol_can"], n, args.radius, features, args.no_chiral, args.nbits) for n in mols])
+                    fps = can_pool.starmap(prepare.fp_morgan_std_mp, [
+                        (mols[n]["mol"], mols[n]["mol_can"], n, args.radius, features, args.no_chiral, args.nbits) for n
+                        in mols])
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
                         mols[fpt[0]]["fp_can"] = fpt[2]
                 else:
-                    fps = can_pool.starmap(fpsearch.fp_morgan_mp, [(mols[n]["mol"], n, args.radius, features, args.no_chiral, args.nbits) for n in mols])
+                    fps = can_pool.starmap(fpsearch.fp_morgan_mp,
+                                           [(mols[n]["mol"], n, args.radius, features, args.no_chiral, args.nbits) for n
+                                            in mols])
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
             else:
@@ -1232,12 +1252,15 @@ def prep_db(args):
             fp_name = f"TopologicalTorsion {args.nbits} bits"
             if args.nproc:
                 if args.standardize:
-                    fps = can_pool.starmap(prepare.fp_tt_std_mp, [(mols[n]["mol"], mols[n]["mol_can"], n, args.nbits, args.no_chiral) for n in mols])
+                    fps = can_pool.starmap(prepare.fp_tt_std_mp,
+                                           [(mols[n]["mol"], mols[n]["mol_can"], n, args.nbits, args.no_chiral) for n in
+                                            mols])
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
                         mols[fpt[0]]["fp_can"] = fpt[2]
                 else:
-                    fps = can_pool.starmap(fpsearch.fp_torsion_mp, [(mols[n]["mol"], n, args.nbits, args.no_chiral) for n in mols])
+                    fps = can_pool.starmap(fpsearch.fp_torsion_mp,
+                                           [(mols[n]["mol"], n, args.nbits, args.no_chiral) for n in mols])
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
             else:
@@ -1249,12 +1272,15 @@ def prep_db(args):
             fp_name = f"AtomPairs {args.nbits} bits"
             if args.nproc:
                 if args.standardize:
-                    fps = can_pool.starmap(prepare.fp_ap_std_mp, [(mols[n]["mol"], mols[n]["mol_can"], n, args.nbits, args.no_chiral) for n in mols])
+                    fps = can_pool.starmap(prepare.fp_ap_std_mp,
+                                           [(mols[n]["mol"], mols[n]["mol_can"], n, args.nbits, args.no_chiral) for n in
+                                            mols])
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
                         mols[fpt[0]]["fp_can"] = fpt[2]
                 else:
-                    fps = can_pool.starmap(fpsearch.fp_atompairs_mp, [(mols[n]["mol"], n, args.nbits, args.no_chiral) for n in mols])
+                    fps = can_pool.starmap(fpsearch.fp_atompairs_mp,
+                                           [(mols[n]["mol"], n, args.nbits, args.no_chiral) for n in mols])
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
             else:
@@ -1266,7 +1292,8 @@ def prep_db(args):
             fp_name = "MACCS"
             if args.nproc:
                 if args.standardize:
-                    fps = can_pool.starmap(prepare.fp_maccs_std_mp, [(mols[n]["mol"], mols[n]["mol_can"], n) for n in mols])
+                    fps = can_pool.starmap(prepare.fp_maccs_std_mp,
+                                           [(mols[n]["mol"], mols[n]["mol_can"], n) for n in mols])
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
                         mols[fpt[0]]["fp_can"] = fpt[2]
@@ -1292,7 +1319,8 @@ def prep_db(args):
         else:
             seed = random.randint(0, 10000)
         if args.nproc:
-            confs = can_pool.starmap(prepare.gen_confs_mp, [(mols[i]["mol"], i, args.nconfs, seed, args.rms_thresh, nthreads) for i in mols])
+            confs = can_pool.starmap(prepare.gen_confs_mp,
+                                     [(mols[i]["mol"], i, args.nconfs, seed, args.rms_thresh, nthreads) for i in mols])
             for entry in confs:
                 mols[entry[1]]["confs"] = entry[0]
                 mols[entry[1]]["pattern"] = entry[2]
@@ -1314,11 +1342,15 @@ def prep_db(args):
                               len(mols) - 1]
         pickle.dump(db_config, open(f"{home}/.vsflow/.db_config", "wb"))
         if args.input:
-            print(f"{args.input} was integrated as database  with shortcut '{db_name}' in VSFlow. You can now search the database calling -d/--database "
-                  f"{db_name}.")
+            print(
+                f"{args.input} was integrated as database  with shortcut '{db_name}' in VSFlow. You can now search the "
+                f"database calling -d/--database "
+                f"{db_name}.")
         else:
-            print(f"{args.database} was integrated as database  with shortcut '{db_name}' in VSFlow. You can now search the database calling -d/--database "
-                  f"{db_name}.")
+            print(
+                f"{args.database} was integrated as database  with shortcut '{db_name}' in VSFlow. You can now search "
+                f"the database calling -d/--database "
+                f"{db_name}.")
     try:
         can_pool.close()
     except AttributeError:
@@ -1330,13 +1362,18 @@ def prep_db(args):
 
 prepare_db.set_defaults(func=prep_db)
 
-
 ## show integrated databases
 
-show_db = subparsers.add_parser("managedb")
-show_db.add_argument("-d", "--default", help="specify name of database to be set as default")
+show_db = subparsers.add_parser("managedb", description="manage integrated databases")
+show_db.add_argument("-d", "--default", help="specify name of database to be set as default", metavar="")
 show_db.add_argument("-s", "--show", help="Show currently integrated databases in VSFlow", action="store_true")
-show_db.add_argument("-rm", "--remove", help="specify name of database to be removed")
+show_db.add_argument("-rm", "--remove", help="specify name of database to be removed", metavar="")
+show_db.add_argument("--set_global", help=f"change path of folder were integrated databases which should be shared "
+                                          f"between different users are stored. "
+                                          f"Useful if VSFlow runs on a server. Default path is {config['global_db']}",
+                     metavar="")
+show_db.add_argument("--set_local", help=f"change path of folder where the user's integrated databases are stored, "
+                                         f"default is {config['local_db']}", metavar="")
 
 
 def get_db(args):
@@ -1357,8 +1394,9 @@ def get_db(args):
     if args.default:
         if args.default in db_shortcut:
             pickle.dump(args.default, open(f"{home}/.vsflow/.db_default", "wb"))
-            print(f"'{args.default}' has been set as default database. This database is now used if the -db flag is not"
-                  f" specified.")
+            print(
+                f"'{args.default}' has been set as the default database. This database is now used if the "
+                f"-d/--database argument is not specified.")
         else:
             print(f"Database '{args.default}' is not integrated in VSFlow. Use preparedb -h to see how a database can "
                   f"be integrated.")
@@ -1367,20 +1405,24 @@ def get_db(args):
             if i == 0:
                 print('\033[1m')
                 print("DATABASES\n")
-                print(f"{db_shortcut[i]}" + " "*(max([len(string) for string in db_shortcut]) + 5 - len(db_shortcut[i])) +
-                      f"{db_create[i]}" + " "*(max([len(string) for string in db_create]) + 5 - len(db_create[i])) +
-                      #f"{db_source[i]}" + " " * (max([len(string) for string in db_source]) + 5 - len(db_source[i])) +
-                      f"{db_standard[i]}" + " " * (max([len(string) for string in db_standard]) + 5 - len(db_standard[i])) +
-                      f"{db_conformers[i]}" + " " * (max([len(string) for string in db_conformers]) + 5 - len(db_conformers[i])) +
+                print(f"{db_shortcut[i]}" + " " * (
+                            max([len(string) for string in db_shortcut]) + 5 - len(db_shortcut[i])) +
+                      f"{db_create[i]}" + " " * (max([len(string) for string in db_create]) + 5 - len(db_create[i])) +
+                      f"{db_standard[i]}" + " " * (
+                                  max([len(string) for string in db_standard]) + 5 - len(db_standard[i])) +
+                      f"{db_conformers[i]}" + " " * (
+                                  max([len(string) for string in db_conformers]) + 5 - len(db_conformers[i])) +
                       f"{db_fps[i]}" + " " * (max([len(string) for string in db_fps]) + 5 - len(db_fps[i])) +
                       f"{db_length[i]}")
                 print('\033[0m')
             else:
-                print(f"{db_shortcut[i]}" + " "*(max([len(string) for string in db_shortcut]) + 5 - len(db_shortcut[i])) +
-                      f"{db_create[i]}" + " "*(max([len(string) for string in db_create]) + 5 - len(db_create[i])) +
-                      #f"{db_source[i]}" + " " * (max([len(string) for string in db_source]) + 5 - len(db_source[i])) +
-                      f"{db_standard[i]}" + " " * (max([len(string) for string in db_standard]) + 5 - len(db_standard[i])) +
-                      f"{db_conformers[i]}" + " " * (max([len(string) for string in db_conformers]) + 5 - len(db_conformers[i])) +
+                print(f"{db_shortcut[i]}" + " " * (
+                            max([len(string) for string in db_shortcut]) + 5 - len(db_shortcut[i])) +
+                      f"{db_create[i]}" + " " * (max([len(string) for string in db_create]) + 5 - len(db_create[i])) +
+                      f"{db_standard[i]}" + " " * (
+                                  max([len(string) for string in db_standard]) + 5 - len(db_standard[i])) +
+                      f"{db_conformers[i]}" + " " * (
+                                  max([len(string) for string in db_conformers]) + 5 - len(db_conformers[i])) +
                       f"{db_fps[i]}" + " " * (max([len(string) for string in db_fps]) + 5 - len(db_fps[i])) +
                       f"{db_length[i]}")
 
@@ -1388,7 +1430,7 @@ def get_db(args):
         print('\033[1m')
         print(f"Default database: {default_db}")
         print('\033[0m')
-        print("You can set (or change) the default database with --default {shortcut} argument")
+        print("You can set (or change) the default database with --default {shortcut}")
     if args.remove:
         if args.remove in db_config:
             choice = input(f"Are you sure you want to remove {args.remove} ? [y/n]")
@@ -1412,6 +1454,41 @@ def get_db(args):
                               f"administrator!")
         else:
             print(f"No database with name {args.remove} integrated in VSFlow !")
+    if args.set_global:
+        if os.path.exists(args.set_global):
+            try:
+                with open(f"{args.set_global}/.test", "w") as test_file:
+                    test_file.write("")
+                config["global_db"] = args.set_global
+                pickle.dump(config, open(f"{home}/.vsflow/.config", "wb"))
+                print(f"Global database path changed to {args.set_global}")
+            except PermissionError:
+                parser.exit(status=2,
+                            message="You do not have the permission to change the global database path. Please contact "
+                                    "your system administrator or re-run with sudo permissions !")
+            except FileNotFoundError:
+                parser.exit(status=1, message="Path not valid. Please make sure you specified a correct path !")
+            except OSError:
+                parser.exit(status=2, message="Permission denied")
+        else:
+            parser.exit(status=1, message="Path not valid. Please make sure you specified a correct path !")
+    if args.set_local:
+        if os.path.exists(args.set_local):
+            try:
+                with open(f"{args.set_local}/.test", "w") as test_file:
+                    test_file.write("")
+                config["local_db"] = args.set_local
+                pickle.dump(config, open(f"{home}/.vsflow/.config", "wb"))
+                print(f"Local database path changed to {args.set_local}")
+            except PermissionError:
+                parser.exit(status=2,
+                            message="Permission denied")
+            except FileNotFoundError:
+                parser.exit(status=1, message="Path not valid. Please make sure you specified a correct path !")
+            except OSError:
+                parser.exit(status=2, message="Permission denied")
+        else:
+            parser.exit(status=1, message="Path not valid. Please make sure you specified a correct path !")
 
 
 show_db.set_defaults(func=get_db)
@@ -1427,4 +1504,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
