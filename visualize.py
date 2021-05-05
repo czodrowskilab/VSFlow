@@ -233,13 +233,20 @@ def gen_pdf_shape(query, results, out_file):
 
 def sim_map(results, query, fp_func, metric, out_file):
     for i in results:
-        fig, maxweight = SimilarityMaps.GetSimilarityMapForFingerprint(query[results[i]["q_num"]]["mol"],
-                                                                       results[i]["mol"],
-                                                                       fp_func, metric=fpsearch.sim_dict[metric])
-        fig.set_figwidth(3.255)
-        fig.set_figheight(3.255)
-        filename = f"{i}.png"
-        fig.savefig(filename, bbox_inches="tight")
+        Chem.Compute2DCoords(results[i]["mol"])
+        try:
+            fig, maxweight = SimilarityMaps.GetSimilarityMapForFingerprint(query[results[i]["q_num"]]["mol"],
+                                                                           results[i]["mol"],
+                                                                           fp_func, metric=fpsearch.sim_dict[metric])
+            fig.set_figwidth(3.255)
+            fig.set_figheight(3.255)
+            filename = f"{i}.png"
+            fig.savefig(filename, bbox_inches="tight")
+        except:
+            d = rdMolDraw2D.MolDraw2DCairo(600, 600)
+            d.DrawMolecule(results[i]["mol"])
+            d.FinishDrawing()
+            d.WriteDrawingText(f"{i}.png")
     pages = gen_pdf_pages(list(results.keys()), results)
     export_pdf(pages, out_file)
 
@@ -250,15 +257,23 @@ def sim_map_mf(results, query, fp_func, metric, out_file):
         mol_keys = []
         for i in results:
             if results[i]["q_num"] == m:
-                fig, maxweight = SimilarityMaps.GetSimilarityMapForFingerprint(query[results[i]["q_num"]]["mol"],
-                                                                               results[i]["mol"],
-                                                                               fp_func,
-                                                                               metric=fpsearch.sim_dict[metric])
-                fig.set_figwidth(3.255)
-                fig.set_figheight(3.255)
-                filename = f"{i}.png"
-                fig.savefig(filename, bbox_inches="tight")
-                mol_keys.append(i)
+                Chem.Compute2DCoords(results[i]["mol"])
+                try:
+                    fig, maxweight = SimilarityMaps.GetSimilarityMapForFingerprint(query[results[i]["q_num"]]["mol"],
+                                                                                   results[i]["mol"],
+                                                                                   fp_func,
+                                                                                   metric=fpsearch.sim_dict[metric])
+                    fig.set_figwidth(3.255)
+                    fig.set_figheight(3.255)
+                    filename = f"{i}.png"
+                    fig.savefig(filename, bbox_inches="tight")
+                    mol_keys.append(i)
+                except:
+                    d = rdMolDraw2D.MolDraw2DCairo(600, 600)
+                    d.DrawMolecule(results[i]["mol"])
+                    d.FinishDrawing()
+                    d.WriteDrawingText(f"{i}.png")
+                    mol_keys.append(i)
         pages = gen_pdf_pages(mol_keys, results)
         export_pdf(pages, f"{out_file}_{file_counter}.pdf")
         file_counter += 1
