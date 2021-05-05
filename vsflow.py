@@ -103,38 +103,44 @@ subparsers = parser.add_subparsers(title="mode",
 
 substructure = subparsers.add_parser("substructure", description="perform a substructure search")
 group = substructure.add_mutually_exclusive_group(required=True)
-group.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="")
+group.add_argument("-i", "--input", help="specify path of input file for query molecules", metavar="")
 group.add_argument("-smi", "--smiles", help="specify SMILES string on command line in double quotes",
                    action="append", metavar="")
 group.add_argument("-sma", "--smarts", help="specify SMARTS string on command line in double quotes",
                    action="append", metavar="")
-substructure.add_argument("-d", "--database", help="specify path of the database file [sdf or vsdb] or specify the "
-                                                   "shortcut for an integrated database", default=db_default,
+substructure.add_argument("-d", "--database", help="specify path/name of the database file [sdf, sdf.gz or vsdb] or "
+                                                   "specify the shortcut for an integrated database", default=db_default,
                           metavar="")
-substructure.add_argument("-o", "--output", help="specify name of output file [default: substructure.sdf]",
+substructure.add_argument("-o", "--output", help="specify name/path of output file, supported formats are .sdf, .xlsx, "
+                                                 ".csv [default: substructure.sdf]",
                           default="substructure.sdf", metavar="")
 substructure.add_argument("-m", "--mode", help="choose a mode for substructure search [std, all_tauts, can_taut, "
                                                "no_std]", choices=["std", "all_tauts", "can_taut", "no_std"],
                           default="std", metavar="")
-substructure.add_argument("-np", "--nproc", type=int, help="Specify the number of processors used when the application "
-                                                           "is run in multiprocessing mode.", metavar="")
-substructure.add_argument("-fm", "--fullmatch", help="when specified, only full matches are returned",
+substructure.add_argument("-np", "--nproc", type=int, help="specify the number of processors to be used to run the "
+                                                           "application in multiprocessing mode", metavar="")
+substructure.add_argument("-fm", "--fullmatch", help="if specified, only full matches are returned",
                           action="store_true")
 substructure.add_argument("-p", "--properties",
-                          help="if specified, calculated molecular properties are written to the output files",
+                          help="if specified, calculated molecular properties (e.g. MW, TPSA etc.) are written to the "
+                               "output files",
                           action="store_true")
 substructure.add_argument("-nt", "--ntauts",
-                          help="maximum number of query tautomers to be enumerated in mode all_tauts [default: 100]",
+                          help="maximum number of query tautomers to be enumerated when mode (-m/--mode) all_tauts is "
+                               "used [default: 100]",
                           type=int, default=100, metavar="")
-substructure.add_argument("-mf", "--multfile", help="generate separate output files for every query molecule",
+substructure.add_argument("-mf", "--multfile", help="if specified, a separate output file for every query molecule is "
+                                                    "generated",
                           action="store_true")
-substructure.add_argument("--filter", help="specify property to filter screening results", action="append", metavar="")
+substructure.add_argument("--filter", help="specify molecular property to filter screening results, see documentation",
+                          action="append", metavar="")
 substructure.add_argument("--mol_column",
-                          help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if not "
+                          help="specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file, if not "
                                "automatically recognized", metavar="")
-substructure.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized",
+substructure.add_argument("--delimiter", help="specify delimiter of csv file, if not automatically recognized",
                           metavar="")
-substructure.add_argument("--pdf", help="generate a pdf file for all results", action="store_true")
+substructure.add_argument("--pdf", help="generate a pdf file in addition to the output file(s) with visualization of "
+                                        "the 2D structures and substructure highlighting", action="store_true")
 substructure.add_argument("--combine",
                           help="if specified, multiple arguments provided via -smi or -sma are combined to one query",
                           action="store_true")
@@ -264,7 +270,7 @@ def substruct(args):
     sub_time_2 = time.time()
     sub_dur = sub_time_2 - sub_time
     print(sub_dur)
-    print("Reading query input ...")
+    print("Reading query ...")
     # load input if paths are correct
     query = read_input(args.smarts, args.smiles, args.input, args.mode, args.ntauts, args.mol_column, args.delimiter,
                        read_smarts=True)
@@ -313,8 +319,7 @@ def substruct(args):
                 sss.sss_taut(query, mols, key, filter_dict, results)
     sub_time_2 = time.time()
     sub_dur = sub_time_2 - sub_time
-    print(sub_dur)
-    print("Finished substructure search")
+    print(f"Finished substructure search in {round(sub_dur, 5)} seconds")
     # calculate properties if desired
     if args.properties:
         for i in results:
@@ -385,45 +390,49 @@ substructure.set_defaults(func=substruct)
 
 fp_sim = subparsers.add_parser("fpsim", description="molecular similarity search using fingerprints")
 group_fp = fp_sim.add_mutually_exclusive_group(required=True)
-group_fp.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="")
+group_fp.add_argument("-i", "--input", help="specify path of input file for query molecules", metavar="")
 group_fp.add_argument("-smi", "--smiles", help="specify SMILES string on command line in double quotes",
                       action="append", metavar="")
-fp_sim.add_argument("-d", "--database", help="specify path of the database file [sdf or vsdb] or specify the shortcut "
-                                             "for an integrated database", default=db_default, metavar="")
-fp_sim.add_argument("-o", "--output", help="specify name of output file [default: fingerprint.sdf]",
+fp_sim.add_argument("-d", "--database", help="specify path/name of the database file [sdf, sdf.gz or vsdb] or specify "
+                                             "the shortcut for an integrated database", default=db_default, metavar="")
+fp_sim.add_argument("-o", "--output", help="specify path/name of output file [default: fingerprint.sdf]",
                     default="fingerprint.sdf", metavar="")
 fp_sim.add_argument("-m", "--mode", help="choose a mode for similarity search [std, all_tauts, can_taut, no_std]",
                     choices=["std", "all_tauts", "can_taut", "no_std"], default="std", metavar="")
-fp_sim.add_argument("-np", "--nproc", type=int, help="Specify the number of processors used when the application is "
-                                                     "run in multiprocessing mode.", metavar="")
+fp_sim.add_argument("-np", "--nproc", type=int, help="specify the number of processors to be used to run the application"
+                                                     " in multiprocessing mode", metavar="")
 fp_sim.add_argument("-f", "--fingerprint",
                     help="specify fingerprint to be used [rdkit, ecfp, fcfp, ap, tt, maccs], [default: fcfp]",
                     choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs", "from_db"], default="fcfp", metavar="")
-fp_sim.add_argument("-r", "--radius", help="specify radius of circular fingerprints ecfp and fcfp [default: 3]",
-                    type=int, default=3, metavar="")
-fp_sim.add_argument("-nb", "--nbits", help="specify bit size of fingerprints [default: 4096]", type=int,
-                    default=4096, metavar="")
+fp_sim.add_argument("-r", "--radius", help="specify radius of circular fingerprints ecfp and fcfp [default: 2]",
+                    type=int, default=2, metavar="")
+fp_sim.add_argument("-nb", "--nbits", help="specify bit size of fingerprints [default: 2048]", type=int,
+                    default=2048, metavar="")
 fp_sim.add_argument("-s", "--similarity", help="specify fingerprint similarity metric to be used [tan, dice, cos, sok, "
                                                "russ, kulc, mcco, tver], [default: tan]",
                     choices=["tan", "dice", "cos", "sok", "russ", "kulc", "mcco", "tver"], default="tan", metavar="")
 fp_sim.add_argument("-t", "--top_hits", type=int, default=10,
-                    help="Maximum number of molecules with highest similarity to keep [default: 10]", metavar="")
+                    help="specify maximum number of molecules with highest similarity to keep [default: 10]", metavar="")
 fp_sim.add_argument("-c", "--cutoff", help="specify cutoff value for similarity coefficient", type=float, metavar="")
-fp_sim.add_argument("-nt", "--ntauts", help="maximum number of query tautomers to be enumerated in mode all_tauts "
-                                            "[default: 100]", type=int, default=100, metavar="")
+fp_sim.add_argument("-nt", "--ntauts", help="maximum number of query tautomers to be enumerated when mode (-m/--mode) "
+                                            "all_tauts is used [default: 100]", type=int, default=100, metavar="")
 fp_sim.add_argument("-mf", "--multfile", help="generate separate output files for every query molecule",
                     action="store_true")
 fp_sim.add_argument("-p", "--properties",
                     help="if specified, calculated molecular properties are written to the output files",
                     action="store_true")
-fp_sim.add_argument("--filter", help="specify property to filter screening results", action="append", metavar="")
-fp_sim.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
+fp_sim.add_argument("--filter", help="specify molecular property to filter screening results, see documentation",
+                    action="append", metavar="")
+fp_sim.add_argument("--mol_column", help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file, if "
                                          "not automatically recognized", metavar="")
-fp_sim.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
-fp_sim.add_argument("--pdf", help="generate a pdf file for all results", action="store_true")
-fp_sim.add_argument("--simmap", help="generates similarity maps for supported fingerprints in pdf file",
+fp_sim.add_argument("--delimiter", help="specify delimiter of csv file if not automatically recognized", metavar="")
+fp_sim.add_argument("--pdf", help="generate a pdf file in addition to the output file(s) with visualization of the 2D "
+                                  "structures and annotation of similarity coefficient", action="store_true")
+fp_sim.add_argument("--simmap", help="if specified, RDKit similarity maps for supported fingerprints are generated in "
+                                     "the pdf file  ",
                     action="store_true")
-fp_sim.add_argument("--no_chiral", help="specify if chirality should not be considered", action="store_false")
+fp_sim.add_argument("--no_chiral", help="if specified, chirality will not be considered for fingerprint generation",
+                    action="store_false")
 fp_sim.add_argument("--tver_alpha", help="specify alpha parameter (weighs database molecule) for Tversky similarity "
                                          "[default: 0.5]", default=0.5, type=float, metavar="")
 fp_sim.add_argument("--tver_beta", help="specify beta parameter (weighs query molecule) for Tversky similarity "
@@ -485,7 +494,6 @@ def fingerprint(args):
     print("Calculating fingerprints ...")
     sub_time = time.time()
     features = False
-    print(args.fingerprint)
     calc_db_fp = True
     if args.fingerprint == "from_db":
         if db_desc:
@@ -501,8 +509,6 @@ def fingerprint(args):
                 parser.exit(status=1,
                             message=f"No fingerprints included in {args.database}. Use preparedb -f/--fingerprint to "
                                     f"generate fps!")
-    print(args.fingerprint)
-    print(fp_key)
     if args.fingerprint == "fcfp" or args.fingerprint == "ecfp":
         if args.fingerprint == "fcfp":
             name = f"FCFP{args.radius * 2}-like Morgan {args.nbits} bits"
@@ -643,7 +649,7 @@ def fingerprint(args):
                 fpsearch.fp_maccs(query, "mol")
     sub_time_2 = time.time()
     sub_dur = sub_time_2 - sub_time
-    print(sub_dur)
+    print(f"Finished fingerprint generation in {round(sub_dur, 5)} seconds")
     sub_time_3 = time.time()
     # Calculate similarities
     print("Calculating similarities ...")
@@ -662,7 +668,7 @@ def fingerprint(args):
                                        args.mode)
     sub_time_4 = time.time()
     sub_dur = sub_time_4 - sub_time_3
-    print(sub_dur)
+    print(f"Finished calculating similarities in {round(sub_dur, 5)} seconds")
     del mols
     print(f"{len(results)} matches found")
     # calculate molecular properties
@@ -730,13 +736,13 @@ fp_sim.set_defaults(func=fingerprint)
 
 shape_sim = subparsers.add_parser("shape")
 shape_group = shape_sim.add_mutually_exclusive_group(required=True)
-shape_group.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="")
+shape_group.add_argument("-i", "--input", help="specify path/name of input file", metavar="")
 shape_group.add_argument("-smi", "--smiles", action="append",
                          help="specify SMILES string on command line in double quotes", metavar="")
+shape_sim.add_argument("-d", "--database", help="specify path of the database file [.sdf/.sdf.gz or .vsdb] or specify "
+                                                "the shortcut for an integrated database", default=db_default, metavar="")
 shape_sim.add_argument("-o", "--output", help="specify name of output file [default: shape.sdf]", default="shape.sdf",
                        metavar="")
-shape_sim.add_argument("-d", "--database", help="specify path of the database file [sdf or vsdb] or specify the "
-                                                "shortcut for an integrated database", default=db_default, metavar="")
 shape_sim.add_argument("-np", "--nproc", help="Specify the number of processors to run the application in "
                                               "multiprocessing mode", type=int, metavar="")
 shape_sim.add_argument("-t", "--top_hits", default=10, type=int, help="Maximum number of molecules with highest "
@@ -746,36 +752,40 @@ shape_sim.add_argument("-a", "--align_method", choices=["mmff", "crippen"], defa
 shape_sim.add_argument("-s", "--score", choices=["combo", "shape", "pharmacophore"], default="combo",
                        help="select score to be used to rank the results", metavar="")
 shape_sim.add_argument("-c", "--cutoff", type=float,
-                       help="if specified, all molecules with score above cutoff are kept", metavar="")
+                       help="if specified, only molecules with score above cutoff value are written to the output "
+                            "files(s)", metavar="")
 shape_sim.add_argument("--seed", type=int,
                        help="specify seed for random number generator, for reproducibility", metavar="")
 shape_sim.add_argument("--keep_confs", default=1, type=int,
-                       help="number of query conformations to keep after energy minimization [default: 1]", metavar="")
+                       help="if queries are 2D: number of conformations per query molecule to keep after energy "
+                            "minimization [default: 1]", metavar="")
 shape_sim.add_argument("--nconfs", default=100, type=int,
-                       help="maximum number of query conformations to be enumerated [default: 100]", metavar="")
+                       help="if queries are 2D: maximum number of query conformations to be enumerated [default: 100]",
+                       metavar="")
 shape_sim.add_argument("--boost", action="store_true",
-                       help="distributes query conformer generation and 3D alignment on all available threads of "
-                            "your cpu")
+                       help="distributes query conformer generation and 3D alignment on all available cores/threads of "
+                            "your system")
 shape_sim.add_argument("--pharm_feats", choices=["gobbi", "basic", "minimal"], default="gobbi",
-                       help="select pharmacophore feature definitions to be used for calculation of 3D fps. "
-                            "[default: 'gobbi']", metavar="")
+                       help="select pharmacophore feature definitions to be used for calculation of 3D pharmacophore "
+                            "fps [gobbi, basic, minimal], [default: 'gobbi']", metavar="")
 shape_sim.add_argument("--shape_simi", choices=["tan", "protr", "tver"], default="tan",
                        help="specify measure to be used to compare shape similarity [tan, protr, tver], "
                             "[default: tver]", metavar="")
 shape_sim.add_argument("--fp_simi", choices=["tan", "dice", "cos", "sok", "russ", "kulc", "mcco", "tver"],
                        default="tan",
-                       help="specify measure to be used to for pharmacophore similarity "
-                            "[tan, dice, cos, sok, russ, kulc, mcco, tver]", metavar="")
+                       help="specify measure to be used to calculate similarity from 3D pharmacophore fps"
+                            "[tan, dice, cos, sok, russ, kulc, mcco, tver], [default: tan]", metavar="")
 shape_sim.add_argument("--tver_alpha", help="specify alpha parameter (weighs database molecule) for Tversky similarity "
                                             "[default: 0.5]", default=0.5, type=float, metavar="")
 shape_sim.add_argument("--tver_beta", help="specify beta parameter (weighs query molecule) for Tversky similarity "
                                            "[default: 0.5]", default=0.5, type=float, metavar="")
-shape_sim.add_argument("--pdf", action="store_true", help="generate a pdf file for all results")
+shape_sim.add_argument("--pdf", action="store_true", help="generate a pdf file for the results with 2D structures "
+                                                          "and annotations")
 shape_sim.add_argument("--pymol", action="store_true", help="generate PyMOL file with 3D conformations for results")
 shape_sim.add_argument("--mol_column",
-                       help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
+                       help="specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file, if "
                             "not automatically recognized", metavar="")
-shape_sim.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
+shape_sim.add_argument("--delimiter", help="specify delimiter of csv file if not automatically recognized", metavar="")
 
 
 def shape(args):
@@ -806,6 +816,7 @@ def shape(args):
                         message=f"{args.output} is no valid path. Please check if you specified the correct path")
     mols = {}
     # load database
+    print("Reading database ...")
     if args.database in db_config:
         try:
             mols = pickle.load(open(f"{config['local_db']}/{args.database}.vsdb", "rb"))
@@ -845,7 +856,6 @@ def shape(args):
                                           f"Please make sure you specified the correct path")
     try:
         db_desc = mols.pop("config")
-        print(db_desc)
         seed = db_desc[4]
         if seed is None:
             if args.seed:
@@ -858,6 +868,7 @@ def shape(args):
         else:
             seed = random.randint(1, 10000)
     # read query
+    print("Reading query ...")
     if args.smiles:
         query = read.read_smiles(args.smiles, mode="std", ntauts=None)
     else:
@@ -868,6 +879,8 @@ def shape(args):
         elif args.input.endswith(".csv") or args.input.endswith(".smi") or args.input.endswith(
                 ".ich") or args.input.endswith(".tsv"):
             query = read.read_csv(args.input, args.mol_column, args.delimiter, mode="std", ntauts=None)
+        elif args.input.endswith(".csv.gz") or args.input.endswith(".tsv.gz") or args.input.endswith(".txt.gz"):
+            query = read.read_csv(args.input, args.mol_column, args.delimiter, mode="std", ntauts=None, gz=True)
         else:
             query = read.read_excel(args.input, args.mol_column, mode="std", ntauts=None)
     if not query:
@@ -886,6 +899,7 @@ def shape(args):
                             query[gr[0][1]]["mol"].AddConformer(query[gr[i][1]]["mol"].GetConformer(), assignId=True)
                             query.pop(i)
     # perform shape screening with specified parameters
+    print("Performing shape screening ...")
     search_start = time.time()
     if args.nproc:
         pool_shape = mp.Pool(processes=args.nproc)
@@ -909,7 +923,6 @@ def shape(args):
             del query_confs
         if mol3d_list:
             query_confs = pool_shape.starmap(shapesearch.gen_query_pfp_mp, mol3d_list)
-            print(query_confs)
             for entry in query_confs:
                 query[entry[0]]["confs"] = entry[1]
             del query_confs
@@ -928,7 +941,7 @@ def shape(args):
                                         args.pharm_feats, args.tver_alpha, args.tver_beta)
     search_end = time.time()
     search_time = search_end - search_start
-    print(search_time)
+    print(f"Finished shape screening in {round(search_time, 5)} seconds")
     # sort results
     print("Filtering and sorting results...")
     grouped_algs = [res for res in
@@ -982,16 +995,22 @@ def shape(args):
                     write_output.write_sdf_conformer(query[j]["confs"], {"Smiles": query[j]["pattern"]}, confid, out_q)
         else:
             os.remove(f"{out_file}_{j + 1}.sdf")
+            print(f"No results found for query molecule {j}")
     if args.pymol:
+        print("Generating PyMOl file ...")
         for j in query:
             try:
                 with open(f"{out_file}_{j + 1}.sdf", "r") as o_file:
                     visualize.export_pymol(f"{out_file}_{j + 1}_query.sdf", f"{out_file}_{j + 1}.sdf")
             except FileNotFoundError:
-                print(f"No results found for query molecule {j}")
                 continue
     if args.pdf:
+        print("Generating PDF file ...")
         visualize.gen_pdf_shape(query, results, out_file)
+    end_time = time.time()
+    print(f"Finished: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    duration = round(end_time - start_time, 5)
+    print(f"Finished in {duration} seconds")
 
 
 shape_sim.set_defaults(func=shape)
@@ -1001,47 +1020,55 @@ shape_sim.set_defaults(func=shape)
 prepare_db = subparsers.add_parser("preparedb", description="prepare databases for virtual screening")
 prep_group = prepare_db.add_mutually_exclusive_group()
 prep_in_group = prepare_db.add_mutually_exclusive_group(required=True)
-prep_in_group.add_argument("-i", "--input", help="specify path of input file [sdf, csv, xlsx]", metavar="infile")
-prep_in_group.add_argument("-d", "--download", help="specify shortcut for database that will be downloaded",
+prep_in_group.add_argument("-i", "--input", help="specify path/name of input file", metavar="")
+prep_in_group.add_argument("-d", "--download", help="specify shortcut for database that should be downloaded "
+                                                    "[chembl or pdb]",
                            choices=["chembl", "pdb"], metavar="")
 prepare_db.add_argument("-o", "--output", default="prep_database.vsdb",
-                        help="specify name of output file [default: prep_database.vsdb]",
+                        help="specify name (and path) of output file without file extension [default: prep_database]",
                         metavar="")
 prep_group.add_argument("-int", "--integrate",
-                        help="specify shortcut for database; saves database to $HOME/VSFlow_Databases", metavar="")
+                        help=f"specify shortcut for database; saves prepared database to {config['local_db']}",
+                        metavar="")
 prep_group.add_argument("-intg", "--int_global",
-                        help="specify shortcut for database, stores database within the repository folder",
+                        help=f"specify shortcut for database; stores prepared database within the repository folder, "
+                             f"{config['global_db']}",
                         metavar="")
 prepare_db.add_argument("-s", "--standardize", help="standardizes molecules, removes salts and associated charges",
                         action="store_true")
-prepare_db.add_argument("-c", "--conformers", help="generates multiple 3D conformers, required for mode shape",
+prepare_db.add_argument("-c", "--conformers", help="generates multiple 3D conformers for database molecules",
                         action="store_true")
 prepare_db.add_argument("-np", "--nproc", type=int,
                         help="specify number of processors to run application in multiprocessing mode", metavar="")
+prepare_db.add_argument("-f", "--fingerprint", help="if specified, the selected fingerprint is generated for database "
+                                                    "molecules [rdkit, ecfp, fcfp, ap, tt, maccs]",
+                        choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs"], metavar="")
+prepare_db.add_argument("-r", "--radius", help="specify radius for circular fingerprints ecfp and fcfp [default: 2]",
+                        type=int, default=2, metavar="")
+prepare_db.add_argument("-nb", "--nbits", help="specify bit size of fingerprints [default: 2048]", type=int,
+                        default=2048, metavar="")
+prepare_db.add_argument("--no_chiral", help="if specified, chirality of molecules will not be considered for "
+                                            "fingerprint generation", action="store_false")
 prepare_db.add_argument("--max_tauts",
-                        help="maximum number of tautomers to be enumerated during standardization process",
+                        help="maximum number of tautomers to be enumerated during standardization process "
+                             "[default: 100]",
                         type=int, default=100, metavar="")
-prepare_db.add_argument("--nconfs", help="maximal number of conformers generated", type=int, default=20, metavar="")
-prepare_db.add_argument("--rms_thresh", help="if specified, only those conformations out of nconfs that are at least "
+prepare_db.add_argument("--nconfs", help="maximal number of conformers generated, [default: 20]", type=int, default=20,
+                        metavar="")
+prepare_db.add_argument("--rms_thresh", help="if specified, only those conformations out of --nconfs that are at least "
                                              "this different are retained (RMSD calculated on heavy atoms)", type=float,
                         metavar="")
 prepare_db.add_argument("--seed", type=int, help="specify seed for random number generator, for reproducibility",
                         metavar="")
 prepare_db.add_argument("--boost", help="distributes conformer generation on all available threads of your cpu",
                         action="store_true")
-prepare_db.add_argument("--header", help="Specify number of row in csv/xlsx containing the column names "
-                                         "[default: 1, e.g. first row]", type=int, metavar="")
+prepare_db.add_argument("--header", help="Specify number of row in csv/xlsx file containing the column names, if not "
+                                         "automatically recognized [e.g. 1 for first row]", type=int, metavar="")
 prepare_db.add_argument("--mol_column",
-                        help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file if "
-                             "not automatically recognized", metavar="")
-prepare_db.add_argument("--delimiter", help="Specify delimiter of csv file if not automatically recognized", metavar="")
-prepare_db.add_argument("-f", "--fingerprint", help="specify fingerprint to be used [rdkit, ecfp, fcfp, ap, tt, maccs]",
-                        choices=["rdkit", "ecfp", "fcfp", "ap", "tt", "maccs"], metavar="")
-prepare_db.add_argument("-r", "--radius", help="specify radius of circular fingerprints ecfp and fcfp [default: 2]",
-                        type=int, default=2, metavar="")
-prepare_db.add_argument("-nb", "--nbits", help="specify bit size of fingerprints [default: 2048]", type=int,
-                        default=2048, metavar="")
-prepare_db.add_argument("--no_chiral", help="specify if chirality should not be considered", action="store_false")
+                        help="Specify name (or position) of mol column [SMILES/InChI] in csv/xlsx file, if "
+                             "not automatically recognized [e.g. 'SMILES' or '1' (for first column)]", metavar="")
+prepare_db.add_argument("--delimiter", help="Specify delimiter of csv file, if not automatically recognized",
+                        metavar="")
 
 
 def prep_db(args):
@@ -1137,7 +1164,7 @@ def prep_db(args):
     db_desc = None
     # read input file or download specified database
     if args.download:
-        print(f"Downloading database {args.database} ...")
+        print(f"Downloading database {args.download} ...")
         if args.download == "chembl":
             if args.nproc:
                 pool = mp.Pool(processes=args.nproc)
@@ -1365,10 +1392,10 @@ prepare_db.set_defaults(func=prep_db)
 ## show integrated databases
 
 show_db = subparsers.add_parser("managedb", description="manage integrated databases")
-show_db.add_argument("-d", "--default", help="specify name of database to be set as default", metavar="")
-show_db.add_argument("-s", "--show", help="Show currently integrated databases in VSFlow", action="store_true")
-show_db.add_argument("-rm", "--remove", help="specify name of database to be removed", metavar="")
-show_db.add_argument("--set_global", help=f"change path of folder were integrated databases which should be shared "
+show_db.add_argument("-s", "--show", help="show currently integrated databases in VSFlow", action="store_true")
+show_db.add_argument("--set_default", help="specify name/shortcut of database to be set as default", metavar="")
+show_db.add_argument("--remove", help="specify name/shortcut of database to be removed", metavar="")
+show_db.add_argument("--set_global", help=f"change path of folder where integrated databases which should be shared "
                                           f"between different users are stored. "
                                           f"Useful if VSFlow runs on a server. Default path is {config['global_db']}",
                      metavar="")
@@ -1391,14 +1418,14 @@ def get_db(args):
         db_fps.append(db_config[db][3])
         db_length.append(db_config[db][4])
     default_db = pickle.load(open(f"{home}/.vsflow/.db_default", "rb"))
-    if args.default:
-        if args.default in db_shortcut:
-            pickle.dump(args.default, open(f"{home}/.vsflow/.db_default", "wb"))
+    if args.set_default:
+        if args.set_default in db_shortcut:
+            pickle.dump(args.set_default, open(f"{home}/.vsflow/.db_default", "wb"))
             print(
-                f"'{args.default}' has been set as the default database. This database is now used if the "
+                f"'{args.set_default}' has been set as the default database. This database is now used if the "
                 f"-d/--database argument is not specified.")
         else:
-            print(f"Database '{args.default}' is not integrated in VSFlow. Use preparedb -h to see how a database can "
+            print(f"Database '{args.set_default}' is not integrated in VSFlow. Use preparedb -h to see how a database can "
                   f"be integrated.")
     if args.show:
         for i in range(len(db_shortcut)):
