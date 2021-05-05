@@ -552,8 +552,10 @@ def read_file(filename, smiles_column, delimiter, mode, ntauts, smarts=False):
     elif filename.endswith(".sdf.gz"):
         sub = read_sd(filename, mode, ntauts, gz=True)
     elif filename.endswith(".csv") or filename.endswith(".smi") or filename.endswith(".ich") or filename.endswith(
-            ".tsv"):
+            ".tsv") or filename.endswith(".txt"):
         sub = read_csv(filename, smiles_column, delimiter, mode, ntauts)
+    elif filename.endswith(".csv.gz") or filename.endswith(".tsv.gz") or filename.endswith(".txt.gz"):
+        sub = read_csv(filename, smiles_column, delimiter, mode, ntauts, gz=True)
     elif filename.endswith(".xlsx"):
         sub = read_excel(filename, smiles_column, mode, ntauts)
     elif filename.endswith(".sma"):
