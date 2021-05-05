@@ -136,7 +136,6 @@ def gen_query_pfp_mp(mol, i):
 
 
 def shape_search(mols, query, nthreads, align_method, dist, fp_simi, pharm_def, tva, tvb):
-    counter = 0
     score = []
     for j in mols:
         if "confs" in mols[j]:
@@ -175,7 +174,6 @@ def shape_search(mols, query, nthreads, align_method, dist, fp_simi, pharm_def, 
                         combo = (max_shape_sim + pfp_sim) / 2
                         score.append((combo, max_shape_sim, pfp_sim, i, j, max(shape_simis)[1],
                                       Chem.Mol(mols[j]["confs"]), confid, mols[j]["pattern"], query[i]["pattern"]))
-                        counter += 1
     return score
 
 
