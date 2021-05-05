@@ -174,7 +174,6 @@ def gen_confs(mols, nconfs, seed, threshold, key, nthreads):
     params.pruneRmsThresh = threshold
     params.numThreads = nthreads
     params.randomSeed = seed
-    counter = 0
     for i in mols:
         mol_H = Chem.AddHs(mols[i][key])
         Chem.EmbedMultipleConfs(mol_H, numConfs=nconfs, params=params)
@@ -184,7 +183,6 @@ def gen_confs(mols, nconfs, seed, threshold, key, nthreads):
             pass
         mols[i]["confs"] = mol_H
         mols[i]["pattern"] = Chem.MolToSmiles(mols[i][key])
-        counter += 1
 
 
 def fp_morgan(mols, radius, features, chiral, nBits):
