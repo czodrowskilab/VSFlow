@@ -214,7 +214,7 @@ def read_input(smarts, smiles, infile, mode, ntauts, mol_column, delimiter, read
                 if infile.endswith(".sdf"):
                     parser.exit(status=1, message="No valid molecules could be read from SD file.")
                 elif infile.endswith(".csv") or infile.endswith(".smi") or infile.endswith(".ich") or infile.endswith(
-                        ".tsv"):  # or args.input_format == "csv":
+                        ".tsv"):
                     parser.exit(status=1,
                                 message="No valid molecules could be read from input file. Please check/specify "
                                         "name of SMILES/InChI containing column (--mol_column) or check/specify the"
