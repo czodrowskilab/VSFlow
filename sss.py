@@ -25,20 +25,20 @@ def substruct_mult(mol, i, query_mol, j, filter_dict):
 
 
 def substruct_mult_fm(mol, i, query_mol, j, filter_dict):
-    match = mol.GetSubstructMatches(query_mol)
+    match = mol.GetSubstructMatch(query_mol)
     if match:
-        if mol.GetNumHeavyAtoms() == len(tuple(l for k in match for l in k)):
+        if mol.GetNumHeavyAtoms() == len(match):
             filt_mol = utils.filter_res(mol, filter_dict)
             if filt_mol:
                 return (i, j, list(match))
 
 
 def substruct_mult_fm_nost(mol, i, query_mol, j, filter_dict):
-    match = mol.GetSubstructMatches(query_mol)
+    match = mol.GetSubstructMatch(query_mol)
     if match:
         frags = Chem.GetMolFrags(mol, asMols=True)
         frag_max = max(frags, key=lambda m: m.GetNumAtoms())
-        if frag_max.GetNumHeavyAtoms() == len(tuple(l for k in match for l in k)):
+        if frag_max.GetNumHeavyAtoms() == len(match):
             filt_mol = utils.filter_res(mol, filter_dict)
             if filt_mol:
                 return (i, j, list(match))
@@ -113,9 +113,9 @@ def sss_fm(query, mols, key, filter_dict, results):
     for i in mols:
         mol = mols[i][key]
         for j in query:
-            match = mol.GetSubstructMatches(query[j]["mol"])
+            match = mol.GetSubstructMatch(query[j]["mol"])
             if match:
-                if mol.GetNumHeavyAtoms() == len(tuple(l for k in match for l in k)):
+                if mol.GetNumHeavyAtoms() == len(match):
                     filt_mol = utils.filter_res(mol, filter_dict)
                     if filt_mol:
                         props = copy.deepcopy(mols[i]["props"])
@@ -129,11 +129,11 @@ def sss_fm_nost(query, mols, key, filter_dict, results):
     for i in mols:
         mol = mols[i][key]
         for j in query:
-            match = mol.GetSubstructMatches(query[j]["mol"])
+            match = mol.GetSubstructMatch(query[j]["mol"])
             if match:
                 frags = Chem.GetMolFrags(mol, asMols=True)
                 frag_max = max(frags, key=lambda m: m.GetNumAtoms())
-                if frag_max.GetNumHeavyAtoms() == len(tuple(l for k in match for l in k)):
+                if frag_max.GetNumHeavyAtoms() == len(match):
                     filt_mol = utils.filter_res(mol, filter_dict)
                     if filt_mol:
                         props = copy.deepcopy(mols[i]["props"])
@@ -148,9 +148,9 @@ def sss_fm_taut(query, mols, key, filter_dict, results):
         mol = mols[i][key]
         for j in query:
             for taut in query[j]["tauts"]:
-                match = mol.GetSubstructMatches(taut)
+                match = mol.GetSubstructMatch(taut)
                 if match:
-                    if mol.GetNumHeavyAtoms() == len(tuple(l for k in match for l in k)):
+                    if mol.GetNumHeavyAtoms() == len(match):
                         filt_mol = utils.filter_res(mol, filter_dict)
                         if filt_mol:
                             props = copy.deepcopy(mols[i]["props"])
