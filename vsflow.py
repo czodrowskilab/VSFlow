@@ -268,8 +268,6 @@ def substruct(args):
     except KeyError:
         db_desc = None
     sub_time_2 = time.time()
-    sub_dur = sub_time_2 - sub_time
-    print(sub_dur)
     print("Reading query ...")
     # load input if paths are correct
     query = read_input(args.smarts, args.smiles, args.input, args.mode, args.ntauts, args.mol_column, args.delimiter,
@@ -325,7 +323,6 @@ def substruct(args):
         for i in results:
             utils.calc_props(results[i]["mol"], results[i]["props"])
     # write results to output file(s)
-    print(f"{len(results)} matches found")
     print("Generating output file(s) ...")
     if args.combine:
         if args.smiles or args.smarts:
@@ -334,7 +331,6 @@ def substruct(args):
             else:
                 npatts = len(args.smarts)
             if npatts > 1:
-                print("and")
                 gr_res = [list(group) for k, group in groupby(sorted(results.values(), key=lambda entry: entry["num"]),
                                                               key=lambda entry: entry["num"])]
                 counter = 0
@@ -348,6 +344,7 @@ def substruct(args):
                                                                f"{entry[i]['props']['QuerySmiles']}"
                         results[counter] = entry[0]
                         counter += 1
+    print(f"{len(results)} matches found")
     if args.multfile:
         if results:
             if args.output.endswith(".csv"):
@@ -478,8 +475,6 @@ def fingerprint(args):
     except KeyError:
         db_desc = None
     sub_time_2 = time.time()
-    sub_dur = sub_time_2 - sub_time
-    print(sub_dur)
     print("Reading query input ...")
     # load input if paths are correct
     query = read_input(None, args.smiles, args.input, args.mode, args.ntauts, args.mol_column, args.delimiter)
