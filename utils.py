@@ -26,8 +26,8 @@ def check_filter(filter_list, parser):
 
 def filter_res(mol, filter_dict):
     filter_func = {"mw": Descriptors.MolWt, "logp": Descriptors.MolLogP, "tpsa": Descriptors.TPSA,
-                   "hdon": Descriptors.NumHDonors, "hacc": Descriptors.NumHAcceptors,
-                   "rotb": Descriptors.NumRotatableBonds, "narom": Descriptors.NumAromaticRings,
+                   "nhdo": Descriptors.NumHDonors, "nhac": Descriptors.NumHAcceptors,
+                   "nrob": Descriptors.NumRotatableBonds, "naro": Descriptors.NumAromaticRings,
                    "nhet": Descriptors.NumAromaticHeterocycles}
     filt_mol = mol
     for prop in filter_dict:
