@@ -481,7 +481,7 @@ def fingerprint(args):
     # set mol used based on selected parameters and database
     key = "mol"
     if db_desc:
-        if db_desc[0] == "yes":
+        if db_desc[9] == "yes":
             if args.mode == "can_taut":
                 key = "mol_can"
     fp_key = "fp"
@@ -498,6 +498,7 @@ def fingerprint(args):
                 args.nbits = db_desc[6]
                 args.radius = db_desc[7]
                 args.no_chiral = db_desc[8]
+            if db_desc[9]:
                 if args.mode == "can_taut":
                     fp_key = "fp_can"
             else:
@@ -1394,7 +1395,8 @@ def prep_db(args):
                               standardized,
                               conformers,
                               fp_name,
-                              len(mols) - 1]
+                              len(mols) - 1,
+                              canonicalized]
         pickle.dump(db_config, open(f"{home}/.vsflow/.db_config", "wb"))
         if args.input:
             print(
@@ -1403,7 +1405,7 @@ def prep_db(args):
                 f"{db_name}.")
         else:
             print(
-                f"{args.database} was integrated as database  with shortcut '{db_name}' in VSFlow. You can now search "
+                f"{args.download} was integrated as database  with shortcut '{db_name}' in VSFlow. You can now search "
                 f"the database calling -d/--database "
                 f"{db_name}.")
     try:
@@ -1443,7 +1445,7 @@ def get_db(args):
         db_shortcut.append(db)
         db_create.append(db_config[db][0])
         db_standard.append(db_config[db][1])
-        db_canonicalized.append(db_config[db][9])
+        db_canonicalized.append(db_config[db][5])
         db_conformers.append(str(db_config[db][2]))
         db_fps.append(db_config[db][3])
         db_length.append(db_config[db][4])
@@ -1480,6 +1482,8 @@ def get_db(args):
                       f"{db_create[i]}" + " " * (max([len(string) for string in db_create]) + 5 - len(db_create[i])) +
                       f"{db_standard[i]}" + " " * (
                                   max([len(string) for string in db_standard]) + 5 - len(db_standard[i])) +
+                      f"{db_canonicalized[i]}" + " " * (
+                              max([len(string) for string in db_canonicalized]) + 5 - len(db_canonicalized[i])) +
                       f"{db_conformers[i]}" + " " * (
                                   max([len(string) for string in db_conformers]) + 5 - len(db_conformers[i])) +
                       f"{db_fps[i]}" + " " * (max([len(string) for string in db_fps]) + 5 - len(db_fps[i])) +
