@@ -1038,6 +1038,9 @@ prepare_db.add_argument("-s", "--standardize", help="standardizes molecules, rem
                         action="store_true")
 prepare_db.add_argument("-c", "--conformers", help="generates multiple 3D conformers for database molecules",
                         action="store_true")
+prepare_db.add_argument("-can", "--canonicalize", help="if specified, the canonical tautomer for every molecule is "
+                                                       "additionally generated and stored in the output database file",
+                        action="store_true")
 prepare_db.add_argument("-np", "--nproc", type=int,
                         help="specify number of processors to run application in multiprocessing mode", metavar="")
 prepare_db.add_argument("-f", "--fingerprint", help="if specified, the selected fingerprint is generated for database "
@@ -1158,6 +1161,7 @@ def prep_db(args):
         else:
             out_path = f"{args.output}.vsdb"
     standardized = "no"
+    canonicalized = "no"
     conformers = 0
     fp_name = "no"
     seed = None
@@ -1202,30 +1206,59 @@ def prep_db(args):
             parser.exit(status=1, message="File format not supported!")
         print(f"Finished reading input file: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
     # standardize molecules
-    if args.standardize:
-        print("Standardizing molecules and canonicalizing tautomers ...")
+    if db_desc:
+        if db_desc[9] == "yes":
+            if args.standardize:
+                args.canonicalize = True
+    if args.standardize and args.canonicalize:
+        print("Standardizing molecules and generating the canonical tautomers ...")
         standardized = "yes"
+        canonicalized = "yes"
         if args.nproc:
-            data_can = can_pool.starmap(prepare.do_standard_mp,
+            data_std_can = can_pool.starmap(prepare.do_standard_mp,
                                         [(mols[n]["mol"], n, args.max_tauts) for n in mols])
-            for entry in data_can:
+            for entry in data_std_can:
                 mols[entry[0]]["mol"] = entry[1]
                 mols[entry[0]]["mol_can"] = entry[2]
         else:
             prepare.do_standard(mols, args.max_tauts)
-        print(f"Finished standardizing molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+        print(f"Finished standardizing and canonicalizing molecules: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime())}")
+    elif args.standardize:
+        print("Standardizing molecules ...")
+        standardized = "yes"
+        if args.nproc:
+            data_std = can_pool.starmap(prepare.standardize_mp, [(mols[n]["mol"], n) for n in mols])
+            for entry in data_std:
+                mols[entry[0]]["mol"] = entry[1]
+        else:
+            prepare.standardize(mols)
+    elif args.canonicalize:
+        print("Generating the canonical tautomers ...")
+        canonicalized = "yes"
+        if args.nproc:
+            data_can = can_pool.starmap(prepare.canonicalize_mp, [(mols[n]["mol"], n, args.max_tauts) for n in mols])
+            for entry in data_can:
+                mols[entry[0]]["mol_can"] = entry[1]
+        else:
+            prepare.canonicalize(mols, args.max_tauts)
     # generate fingerprints
     if db_desc:
-        if db_desc[0] == "yes" and db_desc[5]:
-            pass
-        else:
-            if db_desc[0] == "yes":
-                args.standardize = True
-            if db_desc[5]:
-                if args.standardize:
-                    if not args.fingerprint:
-                        args.fingerprint = db_desc[5]
-                        print("Re-calculating fingerprints ...")
+        if db_desc[9] == "yes":
+            if args.fingerprint:
+                args.canonicalize = True
+        if db_desc[5]:
+            if args.standardize:
+                if not args.fingerprint:
+                    args.fingerprint = db_desc[5]
+                    print("Re-calculating fingerprints ...")
+            elif args.canonicalize:
+                if not args.fingerprint:
+                    args.fingerprint = db_desc[5]
+                    print("Re-calculating fingerprints ...")
+            elif args.standardize and args.canonicalize:
+                if not args.fingerprint:
+                    args.fingerprint = db_desc[5]
+                    print("Re-calculating fingerprints ...")
     if args.fingerprint:
         print("Generating fingerprints ...")
         if args.fingerprint == "fcfp" or args.fingerprint == "ecfp":
@@ -1236,7 +1269,7 @@ def prep_db(args):
                 fp_name = f"ECFP{args.radius * 2}-like Morgan {args.nbits} bits"
                 features = False
             if args.nproc:
-                if args.standardize:
+                if args.canonicalize:
                     fps = can_pool.starmap(prepare.fp_morgan_std_mp, [
                         (mols[n]["mol"], mols[n]["mol_can"], n, args.radius, features, args.no_chiral, args.nbits) for n
                         in mols])
@@ -1250,7 +1283,7 @@ def prep_db(args):
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
             else:
-                if args.standardize:
+                if args.canonicalize:
                     prepare.fp_morgan_std(mols, args.radius, features, args.no_chiral, args.nbits)
                 else:
                     # necessary to use a separate function to avoid floating point error
@@ -1260,7 +1293,7 @@ def prep_db(args):
         elif args.fingerprint == "rdkit":
             fp_name = f"RDKit {args.nbits} bits"
             if args.nproc:
-                if args.standardize:
+                if args.canonicalize:
                     fps = can_pool.starmap(prepare.fp_rdkit_std_mp, [
                         (mols[n]["mol"], mols[n]["mol_can"], n, args.nbits) for n in mols])
                     for fpt in fps:
@@ -1271,14 +1304,14 @@ def prep_db(args):
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
             else:
-                if args.standardize:
+                if args.canonicalize:
                     prepare.fp_rdkit_std(mols, args.nbits)
                 else:
                     fpsearch.fp_rdkit(mols, "mol", args.nbits)
         elif args.fingerprint == "tt":
             fp_name = f"TopologicalTorsion {args.nbits} bits"
             if args.nproc:
-                if args.standardize:
+                if args.canonicalize:
                     fps = can_pool.starmap(prepare.fp_tt_std_mp,
                                            [(mols[n]["mol"], mols[n]["mol_can"], n, args.nbits, args.no_chiral) for n in
                                             mols])
@@ -1291,14 +1324,14 @@ def prep_db(args):
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
             else:
-                if args.standardize:
+                if args.canonicalize:
                     prepare.fp_tt_std(mols, args.nbits, args.no_chiral)
                 else:
                     fpsearch.fp_torsion(mols, "mol", args.nbits, args.no_chiral)
         elif args.fingerprint == "ap":
             fp_name = f"AtomPairs {args.nbits} bits"
             if args.nproc:
-                if args.standardize:
+                if args.canonicalize:
                     fps = can_pool.starmap(prepare.fp_ap_std_mp,
                                            [(mols[n]["mol"], mols[n]["mol_can"], n, args.nbits, args.no_chiral) for n in
                                             mols])
@@ -1311,14 +1344,14 @@ def prep_db(args):
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
             else:
-                if args.standardize:
+                if args.canonicalize:
                     prepare.fp_ap_std(mols, args.nbits, args.no_chiral)
                 else:
                     fpsearch.fp_atompairs(mols, "mol", args.nbits, args.no_chiral)
         else:
             fp_name = "MACCS"
             if args.nproc:
-                if args.standardize:
+                if args.canonicalize:
                     fps = can_pool.starmap(prepare.fp_maccs_std_mp,
                                            [(mols[n]["mol"], mols[n]["mol_can"], n) for n in mols])
                     for fpt in fps:
@@ -1329,7 +1362,7 @@ def prep_db(args):
                     for fpt in fps:
                         mols[fpt[0]]["fp"] = fpt[1]
             else:
-                if args.standardize:
+                if args.canonicalize:
                     prepare.fp_maccs_std(mols)
                 else:
                     fpsearch.fp_maccs(mols, "mol")
@@ -1359,7 +1392,7 @@ def prep_db(args):
                 conformers = 1
             break
     mols["config"] = [standardized, conformers, fp_name, len(mols), seed, args.fingerprint, args.nbits, args.radius,
-                      args.no_chiral]
+                      args.no_chiral, canonicalized]
     pickle.dump(mols, open(out_path, "wb"))
     if args.integrate:
         db_config[db_name] = [time.ctime(os.path.getmtime(out_path)),
@@ -1407,6 +1440,7 @@ def get_db(args):
     db_shortcut = ["shortcut"]
     db_create = ["created"]
     db_standard = ["standardized"]
+    db_canonicalized = ["canonical tautomer"]
     db_conformers = ["conformers/cpd"]
     db_fps = ["fingerprints"]
     db_length = ["number of cpds"]
@@ -1414,6 +1448,7 @@ def get_db(args):
         db_shortcut.append(db)
         db_create.append(db_config[db][0])
         db_standard.append(db_config[db][1])
+        db_canonicalized.append(db_config[db][9])
         db_conformers.append(str(db_config[db][2]))
         db_fps.append(db_config[db][3])
         db_length.append(db_config[db][4])
@@ -1437,6 +1472,8 @@ def get_db(args):
                       f"{db_create[i]}" + " " * (max([len(string) for string in db_create]) + 5 - len(db_create[i])) +
                       f"{db_standard[i]}" + " " * (
                                   max([len(string) for string in db_standard]) + 5 - len(db_standard[i])) +
+                      f"{db_canonicalized[i]}" + " " * (
+                              max([len(string) for string in db_canonicalized]) + 5 - len(db_canonicalized[i])) +
                       f"{db_conformers[i]}" + " " * (
                                   max([len(string) for string in db_conformers]) + 5 - len(db_conformers[i])) +
                       f"{db_fps[i]}" + " " * (max([len(string) for string in db_fps]) + 5 - len(db_fps[i])) +
