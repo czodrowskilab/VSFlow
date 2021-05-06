@@ -49,6 +49,34 @@ def do_standard(mols, ntauts):
             mols[n]["mol_can"] = mols[n]["mol"]
 
 
+def standardize_mp(mol, n):
+    mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
+    return (n, mol_sta)
+
+
+def standardize(mols):
+    for n in mols:
+        mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mols[n]["mol"]),
+                                               skip_standardize=True)
+        mols[n]["mol"] = mol_sta
+
+
+def canonicalize_mp(mol, n, ntauts):
+    mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol)
+    if Chem.MolToSmiles(mol) == Chem.MolToSmiles(mol_can):
+        mol_can = mol
+    return (n, mol_can)
+
+
+def canonicalize(mols, ntauts):
+    for n in mols:
+        mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mols[n]["mol"])
+        if Chem.MolToSmiles(mols[n]["mol"]) == Chem.MolToSmiles(mol_can):
+            mols[n]["mol_can"] = mols[n]["mol"]
+        else:
+            mols[n]["mol_can"] = mol_can
+
+
 def fp_morgan_std_mp(mol, mol_can, i, radius, features, chiral, nBits):
     fp_mol = Chem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nBits, useFeatures=features,
                                                 useChirality=chiral)
