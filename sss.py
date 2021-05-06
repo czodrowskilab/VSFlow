@@ -63,7 +63,6 @@ def sss_fm_taut_mp(query, mols, key, filter_dict, results, pool):
 
 
 def sss_mp(query, mols, key, filter_dict, results, pool):
-    print("mp")
     argslist = [(mols[i][key], i, query[j]["mol"], j, filter_dict) for i in mols for j in query]
     pool_results = pool.starmap(substruct_mult, argslist)
     set_attrs_mp(pool_results, mols, key, query, results)
@@ -76,7 +75,6 @@ def sss_mp_taut(query, mols, key, filter_dict, results, pool):
 
 
 def sss(query, mols, key, filter_dict, results):
-    print("sss")
     counter = 0
     for j in query:
         for i in mols:
