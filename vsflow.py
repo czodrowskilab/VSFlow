@@ -666,7 +666,7 @@ def fingerprint(args):
     sub_dur = sub_time_4 - sub_time_3
     print(f"Finished calculating similarities in {round(sub_dur, 5)} seconds")
     del mols
-    print(f"{len(results)} matches found")
+    print(f"Writing {len(results)} molecules to output file(s)")
     # calculate molecular properties
     if args.properties:
         for i in results:
@@ -1457,8 +1457,8 @@ def get_db(args):
                 f"'{args.set_default}' has been set as the default database. This database is now used if the "
                 f"-d/--database argument is not specified.")
         else:
-            print(f"Database '{args.set_default}' is not integrated in VSFlow. Use preparedb -h to see how a database can "
-                  f"be integrated.")
+            print(f"Database '{args.set_default}' is not integrated in VSFlow. Use preparedb -h to see how a database "
+                  f"can be integrated.")
     if args.show:
         for i in range(len(db_shortcut)):
             if i == 0:
