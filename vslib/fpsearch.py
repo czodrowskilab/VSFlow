@@ -6,7 +6,7 @@ from rdkit.Chem import AllChem as Chem
 from rdkit.Chem import MACCSkeys
 from rdkit.Chem.AtomPairs import Pairs, Torsions
 
-import utils
+from vslib import utils
 
 sim_dict = {"tan": DataStructs.TanimotoSimilarity, "dice": DataStructs.DiceSimilarity,
             "cos": DataStructs.CosineSimilarity, "sok": DataStructs.SokalSimilarity,
