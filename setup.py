@@ -14,6 +14,8 @@ setup(
     url="https://github.com/czodrowskilab/VSFlow",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
         "Environment :: Console",
         "Intended Audience :: Science/Research",
         "Programming Language :: Python :: 3",
