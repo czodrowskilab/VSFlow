@@ -16,7 +16,7 @@ from vslib import fpsearch, prepare, read, shapesearch, sss, utils, visualize, w
 mpl.rc('figure', max_open_warning=0)
 RDLogger.logger().setLevel(RDLogger.CRITICAL)
 
-# set path and global variables
+## set path and global variables
 script_path = os.path.dirname(os.path.abspath(__file__))
 home = os.path.expanduser("~")
 set_global("FPDF_CACHE_MODE", 2)
@@ -29,7 +29,7 @@ if os.path.exists(f"{home}/.vsflow"):
     db_default = pickle.load(open(f"{home}/.vsflow/.db_default", "rb"))
 else:
     os.mkdir(f"{home}/.vsflow")
-    config = {"global_db": f"{script_path}/Databases", "local_db": f"{home}/VSFlow_Databases"}
+    config = {"global_db": f"{home}/VSFlow_Databases", "local_db": f"{home}/VSFlow_Databases"}
     db_config = {}
     db_default = ""
 for key in config:
@@ -47,7 +47,8 @@ for key in config:
                                                                   db_info[0],
                                                                   db_info[1],
                                                                   db_info[2],
-                                                                  db_info[3]]
+                                                                  db_info[3],
+                                                                  db_info[9]]
                 del db
     except FileNotFoundError:
         continue
@@ -74,6 +75,9 @@ for entry in to_remove:
 pickle.dump(config, open(f"{home}/.vsflow/.config", "wb"))
 pickle.dump(db_config, open(f"{home}/.vsflow/.db_config", "wb"))
 pickle.dump(db_default, open(f"{home}/.vsflow/.db_default", "wb"))
+
+
+# set parsers
 parser = argparse.ArgumentParser(description="Virtual Screening Workflow")
 print('''\
 **************************
