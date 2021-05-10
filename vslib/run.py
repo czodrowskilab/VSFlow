@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import argparse
 import copy
 import multiprocessing as mp
@@ -12,14 +11,7 @@ import matplotlib as mpl
 from fpdf import set_global
 from rdkit import RDLogger
 
-import fpsearch
-import prepare
-import read
-import shapesearch
-import sss
-import utils
-import visualize
-import write_output
+from vslib import fpsearch, prepare, read, shapesearch, sss, utils, visualize, write_output
 
 mpl.rc('figure', max_open_warning=0)
 RDLogger.logger().setLevel(RDLogger.CRITICAL)
@@ -1212,7 +1204,7 @@ def prep_db(args):
         canonicalized = "yes"
         if args.nproc:
             data_std_can = can_pool.starmap(prepare.do_standard_mp,
-                                        [(mols[n]["mol"], n, args.max_tauts) for n in mols])
+                                            [(mols[n]["mol"], n, args.max_tauts) for n in mols])
             for entry in data_std_can:
                 mols[entry[0]]["mol"] = entry[1]
                 mols[entry[0]]["mol_can"] = entry[2]
