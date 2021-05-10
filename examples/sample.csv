@@ -1,0 +1,3 @@
+smiles;query_number,ID
+CNCCC1=C(C2=CC=CC=C2)C=CN=C1;query1;12345
+NCCC1=C(CCC2CCCC2)C=CN=C1;query2;1234567

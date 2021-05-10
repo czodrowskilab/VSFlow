@@ -1,0 +1,2 @@
+[C,N]1CCCCC1
+[C,N]1CCC(CC1)[C,O]

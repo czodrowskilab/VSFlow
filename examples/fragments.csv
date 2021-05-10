@@ -1,0 +1,4 @@
+smiles,name,ID
+ClC1=CC=CC=C1,chlorobenzene,PhCl
+OC1=CC=NC=C1,pyridin-4-ol,4-PyrOH
+FC1=CC(O)=CC(Cl)=C1,3-chloro-5-fluorophenol,3C5FP
