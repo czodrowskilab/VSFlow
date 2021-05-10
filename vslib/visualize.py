@@ -116,13 +116,25 @@ def gen_pdf_pages(mol_keys, results):
 
 
 def export_pdf(pages, out_file):
-    pdf_writer = PdfWriter()
-    for page in pages:
-        pdf_reader = PdfReader(page)
-        pdf_writer.addPage(pdf_reader.getPage(0))
-        os.remove(page)
-    with open(out_file, "wb") as file:
-        pdf_writer.write(file)
+    if len(pages) > 400:
+        split_pages = [pages[i * 400:(i + 1) * 400] for i in range((len(pages) + 400 - 1) // 400)]
+        for i in range(len(split_pages)):
+            pdf_writer = PdfWriter()
+            for page in split_pages[i]:
+                pdf_reader = PdfReader(page)
+                pdf_writer.addPage(pdf_reader.getPage(0))
+                os.remove(page)
+            out = out_file.split(".pdf")[0]
+            with open(f"{out}_{i}.pdf", "wb") as file:
+                pdf_writer.write(file)
+    else:
+        pdf_writer = PdfWriter()
+        for page in pages:
+            pdf_reader = PdfReader(page)
+            pdf_writer.addPage(pdf_reader.getPage(0))
+            os.remove(page)
+        with open(out_file, "wb") as file:
+            pdf_writer.write(file)
 
 
 def gen_pdf_mf(query, results, out_file):
