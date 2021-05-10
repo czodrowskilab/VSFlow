@@ -40,41 +40,32 @@ The Python dependencies are:
 * Xlrd >= 1.2.0
 * PyMOL >= 2.3.4
 * Molvs >= 0.1.1
-* Matplotlib >= 3.3.4
+* Matplotlib >= 3.3.4  
+
+Now, you can install VSFlow as follows:
+```bash
+pip install . --use-feature=in-tree-build
+```
 
 ## General Usage
-To run VSFlow as described below, you have to be within the repository folder and the conda environment has to be activated.
+Always make sure the conda environment is activated.
 Now you can run VSFlow as follows:  
 ```bash
-python vsflow.py {mode} {arguments}
+vsflow {mode} {arguments}
 ```
 For example, the following command will display all included modes (substructure, fpsim, shape, preparedb, managedb) and the general usage:
 ```bash
-python vsflow.py -h
+vsflow -h
 ```
 To display all possible arguments for a particular mode, type as follows:
 ```bash
-python vsflow.py {mode} -h
+vsflow {mode} -h
 ```
 For example, with the following command all arguments for mode substructure are shown:
 ```bash
-python vsflow.py substructure -h
+vsflow substructure -h
 ```
-To execute VSFlow from outside the repository folder, the repository path has to be added to your PATH variable and 
-the script has to be made executable. 
-One possible way is described below:
-```bash
-export PATH="/path/to/repository:$PATH"
-```
-To permanently add the repository path to your PATH, add the above statement to your .bashrc or .bash_profile file.  
-Next, make the script file executable:
-```bash
-chmod +x vsflow.py
-```
-Now you can run VSFlow also from outside the repository as follows:
-```bash
-vsflow.py {mode} {arguments}
-```
+
 ## Example Usage
 
 A detailed usage of VSFlow with many examples is provided in the GitHub Wiki:  
