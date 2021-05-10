@@ -2,7 +2,7 @@ import copy
 
 from rdkit.Chem import AllChem as Chem
 
-import utils
+from vslib import utils
 
 
 def set_attrs_mp(pool_results, mols, key, query, results):
