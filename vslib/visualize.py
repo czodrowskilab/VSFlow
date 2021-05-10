@@ -8,7 +8,7 @@ from rdkit.Chem import AllChem as Chem
 from rdkit.Chem.Draw import SimilarityMaps
 from rdkit.Chem.Draw import rdMolDraw2D
 
-import fpsearch
+from vslib import fpsearch
 
 script_path = os.path.dirname(os.path.abspath(__file__))
 ttf_path = f"{script_path}/resources/DejaVuSansMono.ttf"
