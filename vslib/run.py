@@ -1385,6 +1385,7 @@ def prep_db(args):
             break
     mols["config"] = [standardized, conformers, fp_name, len(mols), seed, args.fingerprint, args.nbits, args.radius,
                       args.no_chiral, canonicalized]
+    print("Generating database file ...")
     pickle.dump(mols, open(out_path, "wb"))
     if args.integrate:
         db_config[db_name] = [time.ctime(os.path.getmtime(out_path)),
