@@ -32,7 +32,6 @@ def req_chembl(nproc, pool):
     else:
         sub = {}
         for n in content:
-            print(n)
             mol = Chem.MolFromSmiles(content[n][1])
             if mol:
                 sub[n] = {"mol": mol, "props": {"chembl_id": content[n][0].decode()}}
