@@ -17,16 +17,11 @@ def req_chembl(nproc, pool):
     gcontext = ssl.SSLContext()
     r = urlopen("https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_28/chembl_28_chemreps.txt.gz",
                 context=gcontext)
-    print("loaded")
     fd = gzip.GzipFile(fileobj=r, mode="rb")
     byte_cont = fd.readlines()
-    print("read")
-    print(byte_cont[1].split(b'\t'))
     content = {}
-    print("convert")
     for i in range(1, len(byte_cont)):
         content[i] = byte_cont[i].split(b'\t')[:2]
-    print(content[1])
     del byte_cont
     if nproc:
         sub = {}
@@ -34,7 +29,6 @@ def req_chembl(nproc, pool):
         for i in range(len(preps)):
             sub[i] = preps[i]
         del preps
-        print(sub[1])
     else:
         sub = {}
         for n in content:
@@ -42,7 +36,6 @@ def req_chembl(nproc, pool):
             mol = Chem.MolFromSmiles(content[n][1])
             if mol:
                 sub[n] = {"mol": mol, "props": {"chembl_id": content[n][0].decode()}}
-        print(sub[1])
     del content
     return sub
 
