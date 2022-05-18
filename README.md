@@ -44,7 +44,7 @@ The Python dependencies are:
 
 Now, you can install VSFlow as follows:
 ```bash
-pip install . --use-feature=in-tree-build
+pip install .
 ```
 
 ## General Usage
