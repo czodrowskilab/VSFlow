@@ -8,7 +8,7 @@ setup(
     version="1.0.1",
     description="Virtual Screening Workflow: substructure-, fingerprint- and shape-based screening",
     author="Sascha Jung",
-    author_email="sascha.jung@tu-dortmund.de",
+    author_email="saschajung88@googlemail.com",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/czodrowskilab/VSFlow",
