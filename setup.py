@@ -5,7 +5,7 @@ with open("README.md", "r") as readme:
 
 setup(
     name="vsflow",
-    version="1.0.1",
+    version="1.0.2",
     description="Virtual Screening Workflow: substructure-, fingerprint- and shape-based screening",
     author="Sascha Jung",
     author_email="saschajung88@googlemail.com",
