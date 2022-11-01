@@ -27,12 +27,12 @@ conda activate vsflow
 ```
 Alternatively, you can also create a new conda environment and install the dependencies manually:
 ```bash
-conda create -n vsflow python=3.7
+conda create -n vsflow python=3.9
 conda activate vsflow
 conda install -c conda-forge rdkit xlrd xlsxwriter pdfrw fpdf pymol-open-source molvs matplotlib 
 ```
 The Python dependencies are:  
-* Python = 3.7
+* Python >= 3.7
 * RDKit >= 2019.09.3
 * FPDF >= 1.7.2
 * PDFRW >= 0.4
