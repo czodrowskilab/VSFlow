@@ -12,6 +12,8 @@ written in Python.
 
 ## Installation
 
+### The classic way
+
 First of all, you need a working installation of Anaconda (https://www.anaconda.com/products/individual) or Miniconda (https://conda.io/en/latest/miniconda.html). Both are available for all major platforms.  
 
 Second, you need to clone the VSFlow GitHub repository to your system or download the zip file and unpack it (in the following called the repository folder).   
@@ -46,6 +48,24 @@ Now, you can install VSFlow as follows:
 ```bash
 pip install .
 ```
+
+### Using Docker (Linux only)
+
+First, you need to clone the VSFlow GitHub repository to your system or download the zip file and unpack it (in the following called the repository folder).
+Assuming you have Docker installed and switched to the repository folder, you can build the Docker image as follows:
+```bash
+docker build --tag vsflow .
+```
+The build process might take a while and only needs to be done once. After it is finished, you can run VSFlow as follows:
+```bash
+docker run --rm -it -v $(pwd):/data vsflow
+cd /data
+vsflow --help
+```
+Instead of using `$(pwd)` you can also use the absolute path to your desired working directory. Every file in `/data` in the container, e.g. generated databases or output files by VSFlow,
+is mirrored to your working directory on your host system.
+
+If you are finished, you can exit the container by typing `exit` or pressing `Ctrl+D`.
 
 ## General Usage
 Always make sure the conda environment is activated.
