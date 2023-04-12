@@ -25,5 +25,5 @@ setup(
     packages=["vslib"],
     package_data={"vslib": ["resources/BaseFeatures.fdef", "resources/MinimalFeatures.fdef", "resources/DejaVuSansMono.ttf"]},
     scripts=["vsflow"],
-    python_requires=">=3.7.*"
+    python_requires=">=3.7"
 )
