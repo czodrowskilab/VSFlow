@@ -3,8 +3,10 @@ import ssl
 from itertools import groupby
 from urllib.request import urlopen
 
-from molvs.standardize import Standardizer
-from molvs.tautomer import TautomerCanonicalizer, TautomerEnumerator
+#from molvs.standardize import Standardizer
+#from molvs.tautomer import TautomerCanonicalizer, TautomerEnumerator
+from rdkit.Chem.MolStandardize import Standardizer
+from rdkit.Chem.MolStandardize.tautomer import TautomerCanonicalizer, TautomerEnumerator
 from rdkit.Chem import AllChem as Chem
 from xlrd import open_workbook
 
