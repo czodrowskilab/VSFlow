@@ -1,5 +1,7 @@
-from molvs.standardize import Standardizer
-from molvs.tautomer import TautomerCanonicalizer
+#from molvs.standardize import Standardizer
+#from molvs.tautomer import TautomerCanonicalizer
+from rdkit.Chem.MolStandardize import Standardizer
+from rdkit.Chem.MolStandardize.tautomer import TautomerCanonicalizer
 from rdkit.Chem import AllChem as Chem
 from rdkit.Chem import MACCSkeys
 from rdkit.Chem.AtomPairs import Pairs, Torsions
