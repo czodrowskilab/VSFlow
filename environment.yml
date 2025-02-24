@@ -10,5 +10,4 @@ dependencies:
   - xlsxwriter
   - xlrd
   - pymol-open-source
-  - molvs
   - matplotlib
