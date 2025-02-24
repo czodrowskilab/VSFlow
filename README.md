@@ -31,7 +31,7 @@ Alternatively, you can also create a new conda environment and install the depen
 ```bash
 conda create -n vsflow python=3.9
 conda activate vsflow
-conda install -c conda-forge rdkit xlrd xlsxwriter pdfrw fpdf pymol-open-source molvs matplotlib 
+conda install -c conda-forge rdkit xlrd xlsxwriter pdfrw fpdf pymol-open-source matplotlib 
 ```
 The Python dependencies are:  
 * Python = 3.7 - 3.10
