@@ -3,12 +3,10 @@ import ssl
 from itertools import groupby
 from urllib.request import urlopen
 
-#from molvs.standardize import Standardizer
-#from molvs.tautomer import TautomerCanonicalizer, TautomerEnumerator
-from rdkit.Chem.MolStandardize import Standardizer
-from rdkit.Chem.MolStandardize.tautomer import TautomerCanonicalizer, TautomerEnumerator
+from rdkit import Chem
 from rdkit.Chem import AllChem as Chem
 from xlrd import open_workbook
+from rdkit.Chem.MolStandardize import rdMolStandardize
 
 
 def conv_smi(entry):
@@ -61,16 +59,16 @@ def req_pdb():
 
 def query_standardize(mol):
     try:
-        mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
+        mol_sta = rdMolStandardize.ChargeParent(mol)
         return mol_sta
     except:
         return mol
 
 
-def query_canonicalize(mol, ntauts):
+def query_canonicalize(mol, ntauts=1):
     try:
-        mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
-        mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol_sta)
+        mol_sta = rdMolStandardize.ChargeParent(mol)
+        mol_can = rdMolStandardize.TautomerParent(mol_sta)
         return mol_can
     except:
         return mol
@@ -78,8 +76,8 @@ def query_canonicalize(mol, ntauts):
 
 def query_enumerate(mol, ntauts):
     try:
-        mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
-        mol_tauts = TautomerEnumerator(max_tautomers=ntauts).enumerate(mol_sta)
+        mol_sta = rdMolStandardize.ChargeParent(mol)
+        mol_tauts = [mol for mol in rdMolStandardize.TautomerEnumerator().Enumerate(mol_sta)]
         return (mol_sta, mol_tauts)
     except:
         return (mol, [mol])
@@ -220,28 +218,52 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                 for line in content:
                     mol = mol_func(line.strip("\n"))
                     if mol:
+                        props = {}
+                        try:
+                            name = mol.GetProp("_Name")
+                            props["Name"] = name
+                        except KeyError:
+                            pass
                         mol_sta = query_standardize(mol)
-                        sub[counter] = {"mol": mol_sta, "pattern": line.strip("\n")}
+                        sub[counter] = {"mol": mol_sta, "pattern": line.strip("\n"), "props": props}
                         counter += 1
             elif mode == "can_taut":
                 for line in content:
                     mol = mol_func(line.strip("\n"))
                     if mol:
+                        props = {}
+                        try:
+                            name = mol.GetProp("_Name")
+                            props["Name"] = name
+                        except KeyError:
+                            pass
                         mol_can = query_canonicalize(mol, ntauts)
-                        sub[counter] = {"mol": mol_can, "pattern": line.strip("\n")}
+                        sub[counter] = {"mol": mol_can, "pattern": line.strip("\n"), "props": props}
                         counter += 1
             elif mode == "all_tauts":
                 for line in content:
                     mol = mol_func(line.strip("\n"))
                     if mol:
+                        props = {}
+                        try:
+                            name = mol.GetProp("_Name")
+                            props["Name"] = name
+                        except KeyError:
+                            pass
                         mol_tauts = query_enumerate(mol, ntauts)
-                        sub[counter] = {"mol": mol_tauts[0], "pattern": line.strip("\n"), "tauts": mol_tauts[1]}
+                        sub[counter] = {"mol": mol_tauts[0], "pattern": line.strip("\n"), "tauts": mol_tauts[1], "props": props}
                         counter += 1
             else:
                 for line in content:
                     mol = mol_func(line.strip("\n"))
                     if mol:
-                        sub[counter] = {"mol": mol, "pattern": line.strip("\n")}
+                        props = {}
+                        try:
+                            name = mol.GetProp("_Name")
+                            props["Name"] = name
+                        except KeyError:
+                            pass
+                        sub[counter] = {"mol": mol, "pattern": line.strip("\n"), "props": props}
                         counter += 1
             return sub
     proc_content = {}
@@ -345,8 +367,14 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                         if proc_content[n][smi_pos] != "":
                             mol = mol_func(proc_content[n][smi_pos])
                             if mol:
+                                props = {}
+                                try:
+                                    name = mol.GetProp("_Name")
+                                    props["Name"] = name
+                                except KeyError:
+                                    pass
                                 mol_std = query_standardize(mol)
-                                sub[n] = {"mol": mol_std, "pattern": proc_content[n][smi_pos]}
+                                sub[n] = {"mol": mol_std, "pattern": proc_content[n][smi_pos], "props": props}
                     except IndexError:
                         continue
             elif mode == "can_taut":
@@ -355,8 +383,14 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                         if proc_content[n][smi_pos] != "":
                             mol = mol_func(proc_content[n][smi_pos])
                             if mol:
+                                props = {}
+                                try:
+                                    name = mol.GetProp("_Name")
+                                    props["Name"] = name
+                                except KeyError:
+                                    pass
                                 mol_std = query_canonicalize(mol, ntauts)
-                                sub[n] = {"mol": mol_std, "pattern": proc_content[n][smi_pos]}
+                                sub[n] = {"mol": mol_std, "pattern": proc_content[n][smi_pos], "props": props}
                     except IndexError:
                         continue
             elif mode == "all_tauts":
@@ -365,8 +399,14 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                         if proc_content[n][smi_pos] != "":
                             mol = mol_func(proc_content[n][smi_pos])
                             if mol:
+                                props = {}
+                                try:
+                                    name = mol.GetProp("_Name")
+                                    props["Name"] = name
+                                except KeyError:
+                                    pass
                                 mol_std = query_enumerate(mol, ntauts)
-                                sub[n] = {"mol": mol_std[0], "pattern": proc_content[n][smi_pos], "tauts": mol_std[1]}
+                                sub[n] = {"mol": mol_std[0], "pattern": proc_content[n][smi_pos], "tauts": mol_std[1], "props": props}
                     except IndexError:
                         continue
             else:
@@ -375,7 +415,13 @@ def read_csv(filename, smiles_column, delimiter, mode="std", ntauts=100, header=
                         if proc_content[n][smi_pos] != "":
                             mol = mol_func(proc_content[n][smi_pos])
                             if mol:
-                                sub[n] = {"mol": mol, "pattern": proc_content[n][smi_pos]}
+                                props = {}
+                                try:
+                                    name = mol.GetProp("_Name")
+                                    props["Name"] = name
+                                except KeyError:
+                                    pass
+                                sub[n] = {"mol": mol, "pattern": proc_content[n][smi_pos], "props": props}
                     except IndexError:
                         continue
     return sub
