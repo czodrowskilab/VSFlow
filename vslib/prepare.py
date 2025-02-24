@@ -1,7 +1,5 @@
-#from molvs.standardize import Standardizer
-#from molvs.tautomer import TautomerCanonicalizer
-from rdkit.Chem.MolStandardize import Standardizer
-from rdkit.Chem.MolStandardize.tautomer import TautomerCanonicalizer
+from rdkit.Chem.MolStandardize import rdMolStandardize
+
 from rdkit.Chem import AllChem as Chem
 from rdkit.Chem import MACCSkeys
 from rdkit.Chem.AtomPairs import Pairs, Torsions
@@ -19,8 +17,8 @@ def do_standard_mp(mol: Chem.rdchem.Mol, n: int = 0, ntauts: int = 100) -> tuple
     :rtype: tuple
     """
     try:
-        mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
-        mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol_sta)
+        mol_sta = rdMolStandardize.ChargeParent(mol)
+        mol_can = rdMolStandardize.TautomerParent(mol_sta)
         if Chem.MolToSmiles(mol_sta) == Chem.MolToSmiles(mol_can):
             mol_can = mol_sta
     except:
@@ -39,9 +37,8 @@ def do_standard(mols, ntauts):
     """
     for n in mols:
         try:
-            mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mols[n]["mol"]),
-                                                   skip_standardize=True)
-            mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol_sta)
+            mol_sta = rdMolStandardize.ChargeParent(mols[n]["mol"])
+            mol_can = rdMolStandardize.TautomerParent(mol_sta)
             mols[n]["mol"] = mol_sta
             if Chem.MolToSmiles(mol_sta) == Chem.MolToSmiles(mol_can):
                 mols[n]["mol_can"] = mol_sta
@@ -52,19 +49,18 @@ def do_standard(mols, ntauts):
 
 
 def standardize_mp(mol, n):
-    mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mol), skip_standardize=True)
+    mol_sta = rdMolStandardize.ChargeParent(mol)
     return (n, mol_sta)
 
 
 def standardize(mols):
     for n in mols:
-        mol_sta = Standardizer().charge_parent(Standardizer().fragment_parent(mols[n]["mol"]),
-                                               skip_standardize=True)
+        mol_sta = rdMolStandardize.ChargeParent(mols[n]["mol"])
         mols[n]["mol"] = mol_sta
 
 
 def canonicalize_mp(mol, n, ntauts):
-    mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mol)
+    mol_can = rdMolStandardize.TautomerParent(mol)
     if Chem.MolToSmiles(mol) == Chem.MolToSmiles(mol_can):
         mol_can = mol
     return (n, mol_can)
@@ -72,7 +68,7 @@ def canonicalize_mp(mol, n, ntauts):
 
 def canonicalize(mols, ntauts):
     for n in mols:
-        mol_can = TautomerCanonicalizer(max_tautomers=ntauts).canonicalize(mols[n]["mol"])
+        mol_can = rdMolStandardize.TautomerParent(mols[n]["mol"])
         if Chem.MolToSmiles(mols[n]["mol"]) == Chem.MolToSmiles(mol_can):
             mols[n]["mol_can"] = mols[n]["mol"]
         else:
@@ -220,3 +216,4 @@ def fp_morgan(mols, radius, features, chiral, nBits):
         fp_mol = Chem.GetMorganFingerprintAsBitVect(mols[i]["mol"], radius, nBits=nBits, useFeatures=features,
                                                     useChirality=chiral)
         mols[i]["fp"] = fp_mol
+        
