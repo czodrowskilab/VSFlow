@@ -34,14 +34,13 @@ conda activate vsflow
 conda install -c conda-forge rdkit xlrd xlsxwriter pdfrw fpdf pymol-open-source molvs matplotlib 
 ```
 The Python dependencies are:  
-* Python >= 3.7
+* Python = 3.7 - 3.10
 * RDKit >= 2019.09.3
 * FPDF >= 1.7.2
 * PDFRW >= 0.4
 * XlsxWriter >= 1.2.7
 * Xlrd >= 1.2.0
 * PyMOL >= 2.3.4
-* Molvs >= 0.1.1
 * Matplotlib >= 3.3.4  
 
 Now, you can install VSFlow as follows:
