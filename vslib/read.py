@@ -16,7 +16,7 @@ def conv_smi(entry):
 def req_chembl(nproc, pool):
     gcontext = ssl.SSLContext()
     r = urlopen("https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_28/chembl_28_chemreps.txt.gz",
-                context=gcontext)
+                context=gcontext, timeout=60)
     fd = gzip.GzipFile(fileobj=r, mode="rb")
     byte_cont = fd.readlines()
     content = {}
@@ -40,7 +40,7 @@ def req_chembl(nproc, pool):
 
 
 def req_pdb():
-    r = urlopen("http://ligand-expo.rcsb.org/dictionaries/Components-smiles-stereo-oe.smi")
+    r = urlopen("http://ligand-expo.rcsb.org/dictionaries/Components-smiles-stereo-oe.smi", timeout=60)
     c = r.readlines()
     cont = {}
     for i in range(len(c)):
